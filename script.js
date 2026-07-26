@@ -212,42 +212,32 @@ function generateDistribution() {
         return;
     }
 
+    // جلب الأعداد الأساسية المطلوبة لكل قسم من الـ UI
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
-    // --- بداية نظام التحقق (Validation System) ---
-    // 1. حساب المجاميع المطلوبة في الأقسام اللي المستخدم دخلها
+
+    // --- نظام التحقق (Validation System) ---
+    // تم شرحه وتجهيزه مسبقاً للتأكد من عدم وجود عجز
     let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
     let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
-
-    // 2. حساب الحد الأدنى الرياضي للطلاب المتاحين في أي شهر
     let minPeriodMales = Math.floor(males.length / numPeriods);
     let minPeriodFemales = Math.floor(females.length / numPeriods);
     let minMonthMales = Math.floor(minPeriodMales / mandatoryMonths);
     let minMonthFemales = Math.floor(minPeriodFemales / mandatoryMonths);
 
-    // 3. التحقق: هل المطلوب أكبر من المتاح؟
     if (sumMaleCaps > minMonthMales || sumFemaleCaps > minMonthFemales) {
-        // تجهيز رسالة التنبيه المنظمة
         let confirmMsg = `⚠️ تنبيه هام: الأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين!\n\n` +
-                         `📌 تفاصيل الشهور الأقل عدداً:\n` +
-                         `- إجمالي الذكور المطلوب: ${sumMaleCaps} | المتاح فعلياً: ${minMonthMales}\n` +
-                         `- إجمالي الإناث المطلوب: ${sumFemaleCaps} | المتاح فعلياً: ${minMonthFemales}\n\n` +
-                         `❓ هل تريد الاستمرار وإكمال التوزيع؟\n\n` +
-                         `• اضغط (موافق / OK): لإكمال العملية (سيتم تقليل العدد عشوائياً في بعض الأقسام لسد العجز).\n` +
-                         `• اضغط (إلغاء / Cancel): لإيقاف العملية وتعديل الأعداد يدوياً.`;
-                         
-        // دالة confirm تظهر الرسالة وتنتظر رد المستخدم
-        // إذا ضغط Cancel (false)، سيتم إيقاف العملية باستخدام return
-        if (!confirm(confirmMsg)) {
-            return; 
-        }
+                         `❓ هل تريد الاستمرار وإكمال التوزيع مع تقليل الأعداد عشوائياً في بعض الأقسام لسد العجز؟\n\n` +
+                         `• اضغط (موافق / OK): لإكمال العملية.\n` +
+                         `• اضغط (إلغاء / Cancel): لتعديل الأعداد يدوياً.`;
+        if (!confirm(confirmMsg)) return; 
     }
-    // --- نهاية نظام التحقق ---
 
-    // بناء مصفوفات الفترات من الـ Global Plan عشان نلتزم بالجدول 100%
+    // بناء مصفوفات الفترات من الـ Global Plan لضمان الالتزام بالأعداد
     let periodMaleCounts = window.globalDistributionPlan.males.map(monthsArr => monthsArr.reduce((a,b)=>a+b, 0));
     let periodFemaleCounts = window.globalDistributionPlan.females.map(monthsArr => monthsArr.reduce((a,b)=>a+b, 0));
     
+    // --- الهدف 1: تجهيز مجموعات ثابتة لكل فترة (Cohort Lock) ---
     let malePeriods = [];
     let femalePeriods = [];
     let shuffledMales = shuffle([...males]);
@@ -255,6 +245,7 @@ function generateDistribution() {
     
     let mIdx = 0, fIdx = 0;
     for (let i = 0; i < numPeriods; i++) {
+        // نقطع أسماء من القائمة الرئيسية ونحجزها حصرياً لهذه الفترة
         malePeriods.push(shuffledMales.slice(mIdx, mIdx + periodMaleCounts[i]));
         mIdx += periodMaleCounts[i];
         
@@ -263,15 +254,18 @@ function generateDistribution() {
     }
 
     let html = '';
+    // مصفوفة للاحتفاظ بالطلاب النشطين في كل فترة لاستخدامهم لاحقاً في العلاج الكهربائي
     let periodsActiveStudents = [];
 
-    // التوزيع داخل كل فترة 
+    // --- بدء التوزيع داخل الفترات والأقسام ---
     for (let p = 0; p < numPeriods; p++) {
+        // الطلاب دول ثابتين مش هيتغيروا طول ما احنا جوه الـ Loop بتاعة الفترة دي
         let currentPeriodMales = malePeriods[p];
         let currentPeriodFemales = femalePeriods[p];
         
         periodsActiveStudents.push({ males: [...currentPeriodMales], females: [...currentPeriodFemales] });
 
+        // إنشاء سجل History لمنع الطالب من دخول نفس القسم أكثر من مرة خلال فترته
         let history = {};
         currentPeriodMales.concat(currentPeriodFemales).forEach(student => history[student] = []);
 
@@ -287,36 +281,39 @@ function generateDistribution() {
                         </thead>
                         <tbody>`;
 
+        // التوزيع الشهري لنفس طلاب الفترة (Rotation)
         for (let m = 1; m <= mandatoryMonths; m++) {
             html += `<tr><td><strong>الشهر ${m}</strong></td>`;
             
-            // قراءة العدد الشهري بالضبط من الـ Global Plan اللي ظهرت في الجدول
             let targetMonthMales = window.globalDistributionPlan.males[p][m - 1];
             let targetMonthFemales = window.globalDistributionPlan.females[p][m - 1];
 
-            // توزيع الفائض على الأقسام بالشروط (استثناء الحكيم، 1 كحد أقصى للقسم إما ذكر أو أنثى)
             let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMonthMales, targetMonthFemales);
             let monthMaleCaps = adjustedCaps.males;
             let monthFemaleCaps = adjustedCaps.females;
 
+            // نعمل Shuffle للطلاب المتاحين في الفترة دي عشان التوزيع على الأقسام يكون عشوائي
             let availableMales = shuffle([...currentPeriodMales]);
             let availableFemales = shuffle([...currentPeriodFemales]);
 
             departmentsList.forEach((dept, dIndex) => {
                 let cellStudents = [];
                 
+                // سحب الذكور للقسم
                 let neededMales = monthMaleCaps[dIndex];
                 for (let i = 0; i < availableMales.length && neededMales > 0; i++) {
                     let student = availableMales[i];
+                    // التأكد من أن الطالب لم يدخل هذا القسم من قبل (منع التكرار)
                     if (!history[student].includes(dept)) {
                         cellStudents.push(student);
-                        history[student].push(dept);
+                        history[student].push(dept); // تسجيل القسم في الـ History
                         availableMales.splice(i, 1);
                         neededMales--;
                         i--; 
                     }
                 }
 
+                // سحب الإناث للقسم بنفس المنطق
                 let neededFemales = monthFemaleCaps[dIndex];
                 for (let i = 0; i < availableFemales.length && neededFemales > 0; i++) {
                     let student = availableFemales[i];
@@ -340,7 +337,7 @@ function generateDistribution() {
         html += `</tbody></table></div></div>`;
     }
 
-    // --- توزيع أجهزة العلاج الكهربائي (منفصل) ---
+    // --- الهدف 2: توزيع مسؤولي العلاج الكهربائي بشكل منفصل تماماً (Electrotherapy Isolation) ---
     const electroMaleReq = parseInt(document.getElementById('electroMale').value) || 0;
     const electroFemaleReq = parseInt(document.getElementById('electroFemale').value) || 0;
 
@@ -361,10 +358,12 @@ function generateDistribution() {
                         <tbody>`;
 
         let absoluteMonth = 1;
+        // القوائم دي هتفضل تسجل أسماء الطلاب المختارين من أول يوم لآخر يوم لمنع التكرار المطلق
         let globalUsedElectroMales = [];
         let globalUsedElectroFemales = [];
 
         for (let p = 0; p < numPeriods; p++) {
+            // سحب الطلاب الذين يقضون فترتهم حالياً (Active Cohort) في هذا التوقيت
             let poolMales = [...periodsActiveStudents[p].males];
             let poolFemales = [...periodsActiveStudents[p].females];
 
@@ -374,11 +373,13 @@ function generateDistribution() {
                 for (let w = 1; w <= 4; w++) {
                     let weekList = [];
                     
+                    // اختيار الذكور: يتم استبعاد أي طالب اسمه موجود في مصفوفة الحظر (globalUsedElectroMales)
                     let availM = shuffle(poolMales.filter(s => !globalUsedElectroMales.includes(s)));
                     let pickedM = availM.slice(0, electroMaleReq);
-                    globalUsedElectroMales.push(...pickedM);
+                    globalUsedElectroMales.push(...pickedM); // تسجيلهم كـ "مستخدمين"
                     weekList.push(...pickedM);
 
+                    // اختيار الإناث بنفس منطق المنع
                     let availF = shuffle(poolFemales.filter(s => !globalUsedElectroFemales.includes(s)));
                     let pickedF = availF.slice(0, electroFemaleReq);
                     globalUsedElectroFemales.push(...pickedF);
@@ -399,7 +400,6 @@ function generateDistribution() {
 
     document.getElementById('resultsContainer').innerHTML = html;
     document.getElementById('printActions').style.display = 'block';
-    
     document.getElementById('printArea').scrollIntoView({ behavior: 'smooth' });
 }
 
