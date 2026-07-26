@@ -3,35 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام توزيع طلاب الامتياز - التوزيع العشوائي الرسمي</title>
+    <title>نظام توزيع طلاب الامتياز</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <!-- مكتبة html2pdf لحل مشكلة الخطوط العربية -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="script.js" defer></script>
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>نظام توزيع طلاب الامتياز</h1>
-            <p>التوزيع العشوائي الرسمي والعصري</p>
+    <div class="wizard-container">
+        <header>
+            <h1>نظام توزيع طلاب الامتياز <span>(Internship Distribution System)</span></h1>
+        </header>
+
+        <!-- Step 1 -->
+        <div class="step active" id="step-1">
+            <h2>الخطوة 1: إدخال أسماء الطلاب</h2>
+            <div class="input-grid">
+                <div class="input-group">
+                    <label>أسماء الذكور (Male Students)</label>
+                    <textarea id="maleNames" placeholder="الصق الأسماء هنا... كل اسم في سطر"></textarea>
+                    <div class="counter">العدد: <span id="maleCount">0</span></div>
+                </div>
+                <div class="input-group">
+                    <label>أسماء الإناث (Female Students)</label>
+                    <textarea id="femaleNames" placeholder="الصق الأسماء هنا... كل اسم في سطر"></textarea>
+                    <div class="counter">العدد: <span id="femaleCount">0</span></div>
+                </div>
+            </div>
+            <button class="btn-next" onclick="nextStep(2)">التالي (Next)</button>
         </div>
-    </header>
-    <main class="container">
-        <section class="student-input">
-            <div class="input-group">
-                <label for="maleNames">أسماء الطلاب الذكور</label>
-                <textarea id="maleNames" placeholder="الصق الأسماء هنا، اسم كل طالب في سطر"></textarea>
-                <p>عدد الطلاب الذكور: <span id="maleCount">0</span></p>
-            </div>
-            <div class="input-group">
-                <label for="femaleNames">أسماء الطالبات الإناث</label>
-                <textarea id="femaleNames" placeholder="الصق الأسماء هنا، اسم كل طالبة في سطر"></textarea>
-                <p>عدد الطالبات الإناث: <span id="femaleCount">0</span></p>
-            </div>
-        </section>
-        <section class="configuration">
-            <div class="select-group">
-                <label for="mandatoryMonths">عدد الشهور الإجبارية في المركز</label>
+
+        <!-- Step 2 -->
+        <div class="step" id="step-2">
+            <h2>الخطوة 2: إعدادات الفترات والعلاج الكهربائي</h2>
+            <div class="config-group">
+                <label>عدد الشهور الإجبارية (Mandatory Months)</label>
                 <select id="mandatoryMonths">
                     <option value="1">1 شهر</option>
                     <option value="2">2 شهر</option>
@@ -41,45 +47,69 @@
                     <option value="12">12 شهر</option>
                 </select>
             </div>
-        </section>
-        <section class="period-counts" id="periodCountsContainer">
-            <h2>توزيع أعداد الطلاب لكل فترة إجبارية</h2>
-            <!-- سيتم ملء هذا بالـ JS -->
-        </section>
-        <section class="department-counts">
-            <h2>أعداد الطلاب المطلوبين في كل قسم شهرياً</h2>
-            <table id="departmentInputs">
+            
+            <div class="electrotherapy-group">
+                <h3>مسؤولي العلاج الكهربائي أسبوعياً (Electrotherapy)</h3>
+                <div class="input-grid">
+                    <div class="input-group">
+                        <label>عدد الذكور المطلوب أسبوعياً</label>
+                        <input type="number" id="electroMaleCount" min="0" value="0">
+                    </div>
+                    <div class="input-group">
+                        <label>عدد الإناث المطلوب أسبوعياً</label>
+                        <input type="number" id="electroFemaleCount" min="0" value="0">
+                    </div>
+                </div>
+            </div>
+            <div class="buttons-row">
+                <button class="btn-prev" onclick="prevStep(1)">السابق (Previous)</button>
+                <button class="btn-next" onclick="generatePeriodPreview(); nextStep(3);">التالي (Next)</button>
+            </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step" id="step-3">
+            <h2>الخطوة 3: أعداد الأقسام شهرياً (Monthly Department Capacities)</h2>
+            <div id="periodPreview" class="info-box"></div>
+            
+            <table class="modern-table" id="departmentInputs">
                 <thead>
                     <tr>
-                        <th>القسم</th>
-                        <th>ذكور</th>
-                        <th>إناث</th>
+                        <th>القسم (Department)</th>
+                        <th>ذكور (Males)</th>
+                        <th>إناث (Females)</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- سيتم ملء هذا بالـ JS مع العدادات التلقائية -->
+                    <!-- سيتم توليد الأقسام من الجافاسكريبت -->
                 </tbody>
             </table>
-            <p>مجموع الطلاب المدخلين في الأقسام: <span id="totalDepCount">0</span> / <span id="targetTotalCount">0</span></p>
-        </section>
-        <section class="extra-features">
-            <div class="input-group">
-                <label for="electrotherapyCount">عدد الطلاب لمسؤولي العلاج الكهربائي أسبوعياً</label>
-                <input type="number" id="electrotherapyCount" min="0">
+            <div class="totals-box">
+                مجموع إدخالك للشهر: <span id="totalEntered">0</span> | المتوسط المطلوب للشهر: <span id="targetTotal">0</span>
+                <br><small>(أي زيادة أو نقص سيتم توزيعه عشوائياً كفائض)</small>
             </div>
-        </section>
-        <div class="actions">
-            <button id="generateDistribution">إنشاء التوزيع العشوائي النهائي</button>
-            <button id="printPDF" disabled>طباعة التوزيع (PDF)</button>
+            
+            <div class="buttons-row">
+                <button class="btn-prev" onclick="prevStep(2)">السابق (Previous)</button>
+                <button class="btn-generate" onclick="generateFinalDistribution()">توزيع عشوائي (Generate)</button>
+            </div>
         </div>
-        <section class="results" id="resultsContainer">
-            <!-- سيتم ملء هذا بالـ JS بالجداول النهائية -->
-        </section>
-    </main>
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 نظام توزيع طلاب الامتياز. جميع الحقوق محفوظة.</p>
+
+        <!-- Step 4 -->
+        <div class="step" id="step-4">
+            <div class="header-actions">
+                <h2>النتيجة النهائية (Final Distribution)</h2>
+                <div>
+                    <button class="btn-prev" onclick="prevStep(3)">تعديل (Edit)</button>
+                    <button class="btn-print" onclick="printPDF()">طباعة PDF (Print)</button>
+                </div>
+            </div>
+            
+            <!-- هذا الـ div سيتم تحويله لـ PDF -->
+            <div id="printableArea">
+                <div id="resultsContainer"></div>
+            </div>
         </div>
-    </footer>
+    </div>
 </body>
 </html>
