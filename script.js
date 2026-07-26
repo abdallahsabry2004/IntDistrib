@@ -214,6 +214,35 @@ function generateDistribution() {
 
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
+    // --- بداية نظام التحقق (Validation System) ---
+    // 1. حساب المجاميع المطلوبة في الأقسام اللي المستخدم دخلها
+    let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
+    let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
+
+    // 2. حساب الحد الأدنى الرياضي للطلاب المتاحين في أي شهر
+    let minPeriodMales = Math.floor(males.length / numPeriods);
+    let minPeriodFemales = Math.floor(females.length / numPeriods);
+    let minMonthMales = Math.floor(minPeriodMales / mandatoryMonths);
+    let minMonthFemales = Math.floor(minPeriodFemales / mandatoryMonths);
+
+    // 3. التحقق: هل المطلوب أكبر من المتاح؟
+    if (sumMaleCaps > minMonthMales || sumFemaleCaps > minMonthFemales) {
+        // تجهيز رسالة التنبيه المنظمة
+        let confirmMsg = `⚠️ تنبيه هام: الأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين!\n\n` +
+                         `📌 تفاصيل الشهور الأقل عدداً:\n` +
+                         `- إجمالي الذكور المطلوب: ${sumMaleCaps} | المتاح فعلياً: ${minMonthMales}\n` +
+                         `- إجمالي الإناث المطلوب: ${sumFemaleCaps} | المتاح فعلياً: ${minMonthFemales}\n\n` +
+                         `❓ هل تريد الاستمرار وإكمال التوزيع؟\n\n` +
+                         `• اضغط (موافق / OK): لإكمال العملية (سيتم تقليل العدد عشوائياً في بعض الأقسام لسد العجز).\n` +
+                         `• اضغط (إلغاء / Cancel): لإيقاف العملية وتعديل الأعداد يدوياً.`;
+                         
+        // دالة confirm تظهر الرسالة وتنتظر رد المستخدم
+        // إذا ضغط Cancel (false)، سيتم إيقاف العملية باستخدام return
+        if (!confirm(confirmMsg)) {
+            return; 
+        }
+    }
+    // --- نهاية نظام التحقق ---
 
     // بناء مصفوفات الفترات من الـ Global Plan عشان نلتزم بالجدول 100%
     let periodMaleCounts = window.globalDistributionPlan.males.map(monthsArr => monthsArr.reduce((a,b)=>a+b, 0));
