@@ -79,15 +79,20 @@ function updatePeriodSummary() {
                         <tbody>`;
     
     // محاكاة حسابات الـ Math بالضبط كما تحدث في دالة التوزيع
+    // توزيع عشوائي للفترات والشهور للجدول التوضيحي
+    let periodMaleCounts = getRandomDistributedCounts(totalMales, periodsCount);
+    let periodFemaleCounts = getRandomDistributedCounts(totalFemales, periodsCount);
+
     for (let p = 1; p <= periodsCount; p++) {
-        // حساب نصيب هذه الفترة (توزيع باقي القسمة)
-        let pMales = Math.floor(totalMales / periodsCount) + (p <= (totalMales % periodsCount) ? 1 : 0);
-        let pFemales = Math.floor(totalFemales / periodsCount) + (p <= (totalFemales % periodsCount) ? 1 : 0);
+        let pMales = periodMaleCounts[p - 1];
+        let pFemales = periodFemaleCounts[p - 1];
+        
+        let monthMaleCounts = getRandomDistributedCounts(pMales, months);
+        let monthFemaleCounts = getRandomDistributedCounts(pFemales, months);
         
         for (let m = 1; m <= months; m++) {
-            // حساب نصيب هذا الشهر تحديداً (توزيع باقي القسمة داخل الفترة)
-            let mMales = Math.floor(pMales / months) + (m <= (pMales % months) ? 1 : 0);
-            let mFemales = Math.floor(pFemales / months) + (m <= (pFemales % months) ? 1 : 0);
+            let mMales = monthMaleCounts[m - 1];
+            let mFemales = monthFemaleCounts[m - 1];
             
             tableHtml += `<tr>`;
             if (m === 1) {
@@ -120,47 +125,80 @@ function shuffle(array) {
     return array;
 }
 
-// دالة تقسيم مصفوفة إلى مجموعات (فترات) مع توزيع الفائض عشوائياً
-function divideIntoPeriods(studentsArray, numPeriods) {
-    let shuffled = shuffle([...studentsArray]);
-    let periods = Array.from({ length: numPeriods }, () => []);
+// دالة لتوزيع العدد الكلي مع الفائض بشكل عشوائي تماماً على المجموعات
+function getRandomDistributedCounts(total, bins) {
+    let base = Math.floor(total / bins);
+    let remainder = total % bins;
+    let counts = Array(bins).fill(base);
     
-    let baseCount = Math.floor(shuffled.length / numPeriods);
-    let remainder = shuffled.length % numPeriods;
-
-    let currentIndex = 0;
-    for (let i = 0; i < numPeriods; i++) {
-        let extra = (remainder > 0) ? 1 : 0;
-        let takeCount = baseCount + extra;
-        
-        periods[i] = shuffled.slice(currentIndex, currentIndex + takeCount);
-        currentIndex += takeCount;
-        remainder--;
+    // اختيار أماكن عشوائية للفائض
+    let indices = Array.from({ length: bins }, (_, i) => i);
+    let shuffledIndices = shuffle(indices);
+    
+    for (let i = 0; i < remainder; i++) {
+        counts[shuffledIndices[i]]++;
     }
-    return shuffle(periods);
+    return counts;
 }
 
-// دالة توزيع السعة وتوزيع الفائض للأقسام
-function getMonthlyCapacities(baseCapacities, targetTotalCount) {
-    let caps = [...baseCapacities];
-    let currentSum = caps.reduce((a, b) => a + b, 0);
-
-    // توزيع الزيادة عشوائياً
-    while (currentSum < targetTotalCount) {
-        let randIdx = Math.floor(Math.random() * caps.length);
-        caps[randIdx]++;
-        currentSum++;
-    }
-    // تصحيح النقص
-    while (currentSum > targetTotalCount) {
-        let validIndices = caps.map((val, idx) => val > 0 ? idx : -1).filter(idx => idx !== -1);
-        if (validIndices.length > 0) {
-            let randIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
-            caps[randIdx]--;
-            currentSum--;
+// دالة توزيع الفائض على الأقسام (استثناء الحكيم، وبحد أقصى +1 للقسم إما ذكور أو إناث)
+function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, targetFemales) {
+    let finalMaleCaps = [...baseMaleCaps];
+    let finalFemaleCaps = [...baseFemaleCaps];
+    
+    let currentMaleSum = finalMaleCaps.reduce((a, b) => a + b, 0);
+    let currentFemaleSum = finalFemaleCaps.reduce((a, b) => a + b, 0);
+    
+    let maleSurplus = targetMales - currentMaleSum;
+    let femaleSurplus = targetFemales - currentFemaleSum;
+    
+    // الأقسام المتاحة للفائض (من 0 إلى 5) -> استثناء قسم الحكيم (الاندكس 6)
+    let eligibleIndices = [0, 1, 2, 3, 4, 5];
+    
+    if (maleSurplus > 0 || femaleSurplus > 0) {
+        let shuffledIndices = shuffle([...eligibleIndices]);
+        
+        while ((maleSurplus > 0 || femaleSurplus > 0) && shuffledIndices.length > 0) {
+            let randomDeptIdx = shuffledIndices.shift(); // نختار قسم عشوائي
+            
+            // ندي للقسم ده إما طالب أو طالبة (مش الاتنين)
+            if (maleSurplus > 0) {
+                finalMaleCaps[randomDeptIdx]++;
+                maleSurplus--;
+            } else if (femaleSurplus > 0) {
+                finalFemaleCaps[randomDeptIdx]++;
+                femaleSurplus--;
+            }
+        }
+        
+        // لو الفائض كبير جداً (أكبر من الأقسام الـ 6 المتاحة)، بنعيد اللفة عشان السيستم ميهنجش
+        let safeCounter = 0;
+        while ((maleSurplus > 0 || femaleSurplus > 0) && safeCounter < 50) {
+            let reshuffled = shuffle([...eligibleIndices]);
+            while ((maleSurplus > 0 || femaleSurplus > 0) && reshuffled.length > 0) {
+                let idx = reshuffled.shift();
+                if (maleSurplus > 0) { finalMaleCaps[idx]++; maleSurplus--; }
+                else if (femaleSurplus > 0) { finalFemaleCaps[idx]++; femaleSurplus--; }
+            }
+            safeCounter++;
         }
     }
-    return caps;
+    
+    // في حالة العجز (لو المستخدم دخل أرقام أكبر من المتاح) - برضه بنستثني الحكيم
+    while (currentMaleSum > targetMales) {
+        let valid = eligibleIndices.filter(idx => finalMaleCaps[idx] > 0);
+        if(valid.length === 0) break;
+        finalMaleCaps[valid[Math.floor(Math.random() * valid.length)]]--;
+        currentMaleSum--;
+    }
+    while (currentFemaleSum > targetFemales) {
+        let valid = eligibleIndices.filter(idx => finalFemaleCaps[idx] > 0);
+        if(valid.length === 0) break;
+        finalFemaleCaps[valid[Math.floor(Math.random() * valid.length)]]--;
+        currentFemaleSum--;
+    }
+    
+    return { males: finalMaleCaps, females: finalFemaleCaps };
 }
 
 // الخوارزمية الرئيسية للتوزيع
@@ -178,8 +216,23 @@ function generateDistribution() {
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
 
-    let malePeriods = divideIntoPeriods(males, numPeriods);
-    let femalePeriods = divideIntoPeriods(females, numPeriods);
+    // توزيع الطلاب على الفترات بشكل عشوائي للفائض
+    let periodMaleCounts = getRandomDistributedCounts(males.length, numPeriods);
+    let periodFemaleCounts = getRandomDistributedCounts(females.length, numPeriods);
+    
+    let malePeriods = [];
+    let femalePeriods = [];
+    let shuffledMales = shuffle([...males]);
+    let shuffledFemales = shuffle([...females]);
+    
+    let mIdx = 0, fIdx = 0;
+    for (let i = 0; i < numPeriods; i++) {
+        malePeriods.push(shuffledMales.slice(mIdx, mIdx + periodMaleCounts[i]));
+        mIdx += periodMaleCounts[i];
+        
+        femalePeriods.push(shuffledFemales.slice(fIdx, fIdx + periodFemaleCounts[i]));
+        fIdx += periodFemaleCounts[i];
+    }
 
     let html = '';
     let periodsActiveStudents = [];
@@ -205,19 +258,21 @@ function generateDistribution() {
                             </tr>
                         </thead>
                         <tbody>`;
+        // حساب التوزيع العشوائي للفائض على شهور هذه الفترة
+        let monthMaleCounts = getRandomDistributedCounts(currentPeriodMales.length, mandatoryMonths);
+        let monthFemaleCounts = getRandomDistributedCounts(currentPeriodFemales.length, mandatoryMonths);
 
         for (let m = 1; m <= mandatoryMonths; m++) {
             html += `<tr><td><strong>الشهر ${m}</strong></td>`;
             
-            // [التعديل 2] حساب وتوزيع السعة المطلوبة لهذا الشهر تحديداً وليس الفترة بالكامل
-            let targetMonthMales = Math.floor(currentPeriodMales.length / mandatoryMonths);
-            let targetMonthFemales = Math.floor(currentPeriodFemales.length / mandatoryMonths);
-            
-            if (m <= currentPeriodMales.length % mandatoryMonths) targetMonthMales++;
-            if (m <= currentPeriodFemales.length % mandatoryMonths) targetMonthFemales++;
+            // جلب العدد المستهدف من المصفوفة العشوائية اللي حسبناها
+            let targetMonthMales = monthMaleCounts[m - 1];
+            let targetMonthFemales = monthFemaleCounts[m - 1];
 
-            let monthMaleCaps = getMonthlyCapacities(baseMaleCaps, targetMonthMales);
-            let monthFemaleCaps = getMonthlyCapacities(baseFemaleCaps, targetMonthFemales);
+            // توزيع الفائض على الأقسام بالشروط الجديدة (استثناء الحكيم، 1 كحد أقصى للقسم إما ذكر أو أنثى)
+            let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMonthMales, targetMonthFemales);
+            let monthMaleCaps = adjustedCaps.males;
+            let monthFemaleCaps = adjustedCaps.females;
 
             let availableMales = shuffle([...currentPeriodMales]);
             let availableFemales = shuffle([...currentPeriodFemales]);
