@@ -117,6 +117,13 @@ textarea {
     font-weight: 700;
 }
 
+/* الجدول المصغر التفصيلي */
+.mini-table {
+    font-size: 14px;
+}
+.mini-table th { background-color: #dbeafe; color: var(--primary); }
+.mini-table td, .mini-table th { padding: 8px; border: 1px solid #bfdbfe; text-align: center; }
+
 /* أزرار */
 .actions {
     text-align: center;
