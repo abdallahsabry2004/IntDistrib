@@ -47,8 +47,9 @@
                     </select>
                 </div>
                 
-                <!-- جدول توضيحي للفترات يظهر تلقائياً -->
+                <!-- الملخص وجدول الفترات التفصيلي -->
                 <div id="periodSummaryContainer" class="summary-box"></div>
+                <div id="detailedPeriodTable" class="table-responsive" style="margin-top: 15px;"></div>
             </section>
 
             <!-- الخطوة الثالثة: سعة الأقسام -->
@@ -81,7 +82,7 @@
             <!-- الخطوة الرابعة: العلاج الكهربائي -->
             <section class="step-card" id="step4">
                 <h2>4. مسؤولو أجهزة العلاج الكهربائي (Electrotherapy Duty)</h2>
-                <p class="hint">يتم اختيارهم أسبوعياً من الطلاب المتواجدين بالمركز خلال تلك الفترة.</p>
+                <p class="hint">يتم اختيارهم أسبوعياً من الطلاب المتواجدين بالمركز، بدون تكرار الطالب إطلاقاً طوال فترة تدريبه.</p>
                 <div class="grid-2">
                     <div class="input-group">
                         <label for="electroMale">عدد الذكور المطلوب أسبوعياً</label>
@@ -108,7 +109,7 @@
         
         <div class="no-print actions" id="printActions" style="display: none; text-align: center; margin-bottom: 20px;">
             <button class="btn-success" onclick="window.print()">طباعة كـ PDF (Print)</button>
-            <p class="hint">نصيحة للطباعة: تأكد من اختيار "Landscape" في إعدادات الطابعة.</p>
+            <p class="hint">نصيحة للطباعة: تأكد من اختيار "Landscape" و "Scale: Default" في إعدادات الطابعة.</p>
         </div>
 
         <div id="resultsContainer">
