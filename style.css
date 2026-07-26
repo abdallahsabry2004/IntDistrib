@@ -1,0 +1,148 @@
+/* الألوان والهوية */
+:root {
+    --primary-color: #3b82f6; /* أزرق فاتح عصري */
+    --secondary-color: #1f2937; /* رمادي داكن للنص */
+    --background-color: #f9fafb; /* رمادي فاتح للخلفية */
+    --border-color: #e5e7eb; /* رمادي فاتح للفصل */
+    --text-on-primary: #ffffff; /* أبيض */
+}
+
+/* التنسيق الأساسي */
+body {
+    font-family: 'Cairo', 'Almarai', sans-serif; /* خطوط عربية رسمية ועصريّة */
+    margin: 0;
+    background-color: var(--background-color);
+    color: var(--secondary-color);
+    direction: rtl; /* اتجاه النص من اليمين إلى اليسار */
+}
+
+.container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* الرأس والتذييل */
+header, footer {
+    background-color: var(--secondary-color);
+    color: var(--text-on-primary);
+    text-align: center;
+    padding: 40px 0;
+}
+
+header h1, footer p {
+    margin: 0;
+}
+
+header p {
+    font-size: 1.2rem;
+    color: var(--border-color);
+}
+
+/* العناصر الأساسية */
+section {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+    margin-top: 0;
+    color: var(--secondary-color);
+}
+
+/* نماذج الإدخال */
+.input-group, .select-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+textarea, input[type="number"], select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box; /* لضمان أن العرض يشمل الـ padding والـ border */
+}
+
+textarea {
+    resize: vertical; /* للسماح بتغيير الارتفاع فقط */
+}
+
+/* الجداول */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    background-color: var(--border-color);
+}
+
+/* العدادات التلقائية للأقسام */
+#totalDepCount, #targetTotalCount {
+    font-weight: bold;
+}
+
+/* أزرار الإجراءات */
+.actions {
+    text-align: center;
+    margin-top: 20px;
+}
+
+button {
+    background-color: var(--primary-color);
+    color: var(--text-on-primary);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2563eb;
+}
+
+button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* النتائج */
+.results table {
+    font-size: 0.9rem;
+}
+
+.results tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+/* تصميم متجاوب ليكون الموقع قابلاً للاستخدام على الأجهزة المحمولة */
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+    textarea, input[type="number"], select {
+        padding: 8px;
+    }
+    button {
+        padding: 10px 20px;
+    }
+}
