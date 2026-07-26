@@ -1,3 +1,7 @@
+// --- Global State ---
+// هنستخدم المتغير ده عشان نحفظ خطة التوزيع اللي بتظهر في الجدول، ونستخدمها في التوزيع النهائي
+window.globalDistributionPlan = { males: [], females: [] };
+
 // بيانات الأقسام
 const departmentsList = [
     'قسم الباطنة', 'قسم الجراحة والحروق', 'قسم صحة المرأة', 
@@ -23,7 +27,6 @@ function buildDepartmentsTable() {
         `;
     });
 
-    // إضافة مستمعات للأحداث لجمع المجاميع تلقائياً
     document.querySelectorAll('.dept-male, .dept-female').forEach(input => {
         input.addEventListener('input', calculateTotals);
     });
@@ -35,7 +38,7 @@ function updateCounts() {
     
     document.getElementById('maleCount').innerText = males.length;
     document.getElementById('femaleCount').innerText = females.length;
-    updatePeriodSummary(); // تحديث الملخص والجدول التفصيلي
+    updatePeriodSummary(); 
 }
 
 function calculateTotals() {
@@ -46,72 +49,6 @@ function calculateTotals() {
     
     document.getElementById('totalMaleInput').innerText = totalMale;
     document.getElementById('totalFemaleInput').innerText = totalFemale;
-}
-
-// عرض ملخص الفترات والجدول التفصيلي
-function updatePeriodSummary() {
-    const months = parseInt(document.getElementById('mandatoryMonths').value);
-    const periodsCount = 12 / months;
-    const totalMales = parseInt(document.getElementById('maleCount').innerText);
-    const totalFemales = parseInt(document.getElementById('femaleCount').innerText);
-
-    // [التعديل 1] حساب العدد الشهري بدلاً من فترة كاملة في النص التوضيحي
-    const periodMale = Math.floor(totalMales / periodsCount);
-    const periodFemale = Math.floor(totalFemales / periodsCount);
-    const monthMale = Math.floor(periodMale / months);
-    const monthFemale = Math.floor(periodFemale / months);
-
-    let html = `<strong>معلومة:</strong> سيتم تقسيم الطلاب إلى <strong>${periodsCount} فترات</strong>، كل فترة مدتها <strong>${months} شهر</strong>.<br>`;
-    html += `في كل شهر، سيتواجد تقريباً <strong>${monthMale} ذكور</strong> و <strong>${monthFemale} إناث</strong> للتوزيع على الأقسام.`;
-    
-    document.getElementById('periodSummaryContainer').innerHTML = html;
-
-    // [إضافة] إنشاء الجدول التفصيلي لعدد الطلاب في كل شهر داخل كل فترة
-    let tableHtml = `<table class="data-table mini-table">
-                        <thead>
-                            <tr>
-                                <th>الفترة (Period)</th>
-                                <th>الشهر داخل الفترة</th>
-                                <th>عدد الذكور المتاح</th>
-                                <th>عدد الإناث المتاح</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-    
-    // محاكاة حسابات الـ Math بالضبط كما تحدث في دالة التوزيع
-    // توزيع عشوائي للفترات والشهور للجدول التوضيحي
-    let periodMaleCounts = getRandomDistributedCounts(totalMales, periodsCount);
-    let periodFemaleCounts = getRandomDistributedCounts(totalFemales, periodsCount);
-
-    for (let p = 1; p <= periodsCount; p++) {
-        let pMales = periodMaleCounts[p - 1];
-        let pFemales = periodFemaleCounts[p - 1];
-        
-        let monthMaleCounts = getRandomDistributedCounts(pMales, months);
-        let monthFemaleCounts = getRandomDistributedCounts(pFemales, months);
-        
-        for (let m = 1; m <= months; m++) {
-            let mMales = monthMaleCounts[m - 1];
-            let mFemales = monthFemaleCounts[m - 1];
-            
-            tableHtml += `<tr>`;
-            if (m === 1) {
-                tableHtml += `<td rowspan="${months}"><strong>الفترة ${p}</strong></td>`;
-            }
-            tableHtml += `<td>الشهر ${m}</td>
-                          <td>${mMales}</td>
-                          <td>${mFemales}</td>
-                      </tr>`;
-        }
-    }
-    tableHtml += `</tbody></table>`;
-    
-    // إظهار الجدول فقط إذا كان هناك بيانات
-    if (totalMales > 0 || totalFemales > 0) {
-        document.getElementById('detailedPeriodTable').innerHTML = tableHtml;
-    } else {
-        document.getElementById('detailedPeriodTable').innerHTML = '';
-    }
 }
 
 // دالة الخلط العشوائي (Fisher-Yates)
@@ -127,11 +64,11 @@ function shuffle(array) {
 
 // دالة لتوزيع العدد الكلي مع الفائض بشكل عشوائي تماماً على المجموعات
 function getRandomDistributedCounts(total, bins) {
+    if (bins === 0) return [];
     let base = Math.floor(total / bins);
     let remainder = total % bins;
     let counts = Array(bins).fill(base);
     
-    // اختيار أماكن عشوائية للفائض
     let indices = Array.from({ length: bins }, (_, i) => i);
     let shuffledIndices = shuffle(indices);
     
@@ -141,7 +78,7 @@ function getRandomDistributedCounts(total, bins) {
     return counts;
 }
 
-// دالة توزيع الفائض على الأقسام (استثناء الحكيم، وبحد أقصى +1 للقسم إما ذكور أو إناث)
+// دالة توزيع الفائض على الأقسام (استثناء الحكيم، وبحد أقصى +1 للقسم)
 function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, targetFemales) {
     let finalMaleCaps = [...baseMaleCaps];
     let finalFemaleCaps = [...baseFemaleCaps];
@@ -152,39 +89,30 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     let maleSurplus = targetMales - currentMaleSum;
     let femaleSurplus = targetFemales - currentFemaleSum;
     
-    // الأقسام المتاحة للفائض (من 0 إلى 5) -> استثناء قسم الحكيم (الاندكس 6)
+    // الأقسام المتاحة للفائض (استثناء قسم الحكيم الاندكس 6)
     let eligibleIndices = [0, 1, 2, 3, 4, 5];
     
     if (maleSurplus > 0 || femaleSurplus > 0) {
-        let shuffledIndices = shuffle([...eligibleIndices]);
-        
-        while ((maleSurplus > 0 || femaleSurplus > 0) && shuffledIndices.length > 0) {
-            let randomDeptIdx = shuffledIndices.shift(); // نختار قسم عشوائي
-            
-            // ندي للقسم ده إما طالب أو طالبة (مش الاتنين)
-            if (maleSurplus > 0) {
-                finalMaleCaps[randomDeptIdx]++;
-                maleSurplus--;
-            } else if (femaleSurplus > 0) {
-                finalFemaleCaps[randomDeptIdx]++;
-                femaleSurplus--;
-            }
-        }
-        
-        // لو الفائض كبير جداً (أكبر من الأقسام الـ 6 المتاحة)، بنعيد اللفة عشان السيستم ميهنجش
         let safeCounter = 0;
+        // طالما في فائض، هنوزع عشوائي بحد أقصى 1 للقسم في اللفة
         while ((maleSurplus > 0 || femaleSurplus > 0) && safeCounter < 50) {
-            let reshuffled = shuffle([...eligibleIndices]);
-            while ((maleSurplus > 0 || femaleSurplus > 0) && reshuffled.length > 0) {
-                let idx = reshuffled.shift();
-                if (maleSurplus > 0) { finalMaleCaps[idx]++; maleSurplus--; }
-                else if (femaleSurplus > 0) { finalFemaleCaps[idx]++; femaleSurplus--; }
+            let shuffledIndices = shuffle([...eligibleIndices]);
+            while ((maleSurplus > 0 || femaleSurplus > 0) && shuffledIndices.length > 0) {
+                let randomDeptIdx = shuffledIndices.shift(); 
+                
+                if (maleSurplus > 0) {
+                    finalMaleCaps[randomDeptIdx]++;
+                    maleSurplus--;
+                } else if (femaleSurplus > 0) {
+                    finalFemaleCaps[randomDeptIdx]++;
+                    femaleSurplus--;
+                }
             }
             safeCounter++;
         }
     }
     
-    // في حالة العجز (لو المستخدم دخل أرقام أكبر من المتاح) - برضه بنستثني الحكيم
+    // معالجة العجز (لو الإدخال أكبر من المتاح) مع استثناء الحكيم
     while (currentMaleSum > targetMales) {
         let valid = eligibleIndices.filter(idx => finalMaleCaps[idx] > 0);
         if(valid.length === 0) break;
@@ -201,7 +129,78 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     return { males: finalMaleCaps, females: finalFemaleCaps };
 }
 
-// الخوارزمية الرئيسية للتوزيع
+// عرض ملخص الفترات والجدول التفصيلي (وحفظ الخطة في Global State)
+function updatePeriodSummary() {
+    const months = parseInt(document.getElementById('mandatoryMonths').value);
+    const periodsCount = 12 / months;
+    const totalMales = parseInt(document.getElementById('maleCount').innerText);
+    const totalFemales = parseInt(document.getElementById('femaleCount').innerText);
+
+    // تصفير الـ Global Plan
+    window.globalDistributionPlan = { males: [], females: [] };
+
+    let periodMaleCounts = getRandomDistributedCounts(totalMales, periodsCount);
+    let periodFemaleCounts = getRandomDistributedCounts(totalFemales, periodsCount);
+
+    let tableHtml = `<table class="data-table mini-table">
+                        <thead>
+                            <tr>
+                                <th>الفترة (Period)</th>
+                                <th>الشهر داخل الفترة</th>
+                                <th>عدد الذكور المتاح</th>
+                                <th>عدد الإناث المتاح</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+    
+    let totalPreviewMaleMonth = 0;
+    let totalPreviewFemaleMonth = 0;
+
+    for (let p = 1; p <= periodsCount; p++) {
+        let pMales = periodMaleCounts[p - 1];
+        let pFemales = periodFemaleCounts[p - 1];
+        
+        let monthMaleCounts = getRandomDistributedCounts(pMales, months);
+        let monthFemaleCounts = getRandomDistributedCounts(pFemales, months);
+        
+        // حفظ الخطة الشهرية للفترة دي في الـ Global State
+        window.globalDistributionPlan.males.push(monthMaleCounts);
+        window.globalDistributionPlan.females.push(monthFemaleCounts);
+
+        for (let m = 1; m <= months; m++) {
+            let mMales = monthMaleCounts[m - 1];
+            let mFemales = monthFemaleCounts[m - 1];
+            
+            if(p === 1 && m === 1) {
+                totalPreviewMaleMonth = mMales;
+                totalPreviewFemaleMonth = mFemales;
+            }
+
+            tableHtml += `<tr>`;
+            if (m === 1) {
+                tableHtml += `<td rowspan="${months}"><strong>الفترة ${p}</strong></td>`;
+            }
+            tableHtml += `<td>الشهر ${m}</td>
+                          <td>${mMales}</td>
+                          <td>${mFemales}</td>
+                      </tr>`;
+        }
+    }
+    tableHtml += `</tbody></table>`;
+    
+    let html = `<strong>معلومة:</strong> سيتم تقسيم الطلاب إلى <strong>${periodsCount} فترات</strong>، كل فترة مدتها <strong>${months} شهر</strong>.<br>`;
+    html += `في الشهر الواحد، سيتواجد تقريباً <strong>${totalPreviewMaleMonth} ذكور</strong> و <strong>${totalPreviewFemaleMonth} إناث</strong> (تزيد أو تنقص بمقدار 1 كفائض).`;
+    
+    document.getElementById('periodSummaryContainer').innerHTML = html;
+
+    if (totalMales > 0 || totalFemales > 0) {
+        document.getElementById('detailedPeriodTable').innerHTML = tableHtml;
+    } else {
+        document.getElementById('detailedPeriodTable').innerHTML = '';
+    }
+}
+
+// الخوارزمية الرئيسية للتوزيع (تقرأ من الـ Global State)
 function generateDistribution() {
     const males = document.getElementById('maleNames').value.split('\n').filter(n => n.trim() !== '');
     const females = document.getElementById('femaleNames').value.split('\n').filter(n => n.trim() !== '');
@@ -216,9 +215,9 @@ function generateDistribution() {
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
 
-    // توزيع الطلاب على الفترات بشكل عشوائي للفائض
-    let periodMaleCounts = getRandomDistributedCounts(males.length, numPeriods);
-    let periodFemaleCounts = getRandomDistributedCounts(females.length, numPeriods);
+    // بناء مصفوفات الفترات من الـ Global Plan عشان نلتزم بالجدول 100%
+    let periodMaleCounts = window.globalDistributionPlan.males.map(monthsArr => monthsArr.reduce((a,b)=>a+b, 0));
+    let periodFemaleCounts = window.globalDistributionPlan.females.map(monthsArr => monthsArr.reduce((a,b)=>a+b, 0));
     
     let malePeriods = [];
     let femalePeriods = [];
@@ -237,7 +236,7 @@ function generateDistribution() {
     let html = '';
     let periodsActiveStudents = [];
 
-    // التوزيع داخل كل فترة (الشهور والأقسام)
+    // التوزيع داخل كل فترة 
     for (let p = 0; p < numPeriods; p++) {
         let currentPeriodMales = malePeriods[p];
         let currentPeriodFemales = femalePeriods[p];
@@ -258,18 +257,15 @@ function generateDistribution() {
                             </tr>
                         </thead>
                         <tbody>`;
-        // حساب التوزيع العشوائي للفائض على شهور هذه الفترة
-        let monthMaleCounts = getRandomDistributedCounts(currentPeriodMales.length, mandatoryMonths);
-        let monthFemaleCounts = getRandomDistributedCounts(currentPeriodFemales.length, mandatoryMonths);
 
         for (let m = 1; m <= mandatoryMonths; m++) {
             html += `<tr><td><strong>الشهر ${m}</strong></td>`;
             
-            // جلب العدد المستهدف من المصفوفة العشوائية اللي حسبناها
-            let targetMonthMales = monthMaleCounts[m - 1];
-            let targetMonthFemales = monthFemaleCounts[m - 1];
+            // قراءة العدد الشهري بالضبط من الـ Global Plan اللي ظهرت في الجدول
+            let targetMonthMales = window.globalDistributionPlan.males[p][m - 1];
+            let targetMonthFemales = window.globalDistributionPlan.females[p][m - 1];
 
-            // توزيع الفائض على الأقسام بالشروط الجديدة (استثناء الحكيم، 1 كحد أقصى للقسم إما ذكر أو أنثى)
+            // توزيع الفائض على الأقسام بالشروط (استثناء الحكيم، 1 كحد أقصى للقسم إما ذكر أو أنثى)
             let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMonthMales, targetMonthFemales);
             let monthMaleCaps = adjustedCaps.males;
             let monthFemaleCaps = adjustedCaps.females;
@@ -336,8 +332,6 @@ function generateDistribution() {
                         <tbody>`;
 
         let absoluteMonth = 1;
-        
-        // [التعديل 3] مصفوفة عامة لمنع تكرار الطالب إطلاقاً طوال فترات التدريب
         let globalUsedElectroMales = [];
         let globalUsedElectroFemales = [];
 
