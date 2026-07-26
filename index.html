@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام توزيع طلاب الامتياز - التوزيع العشوائي الرسمي</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>نظام توزيع طلاب الامتياز</h1>
+            <p>التوزيع العشوائي الرسمي والعصري</p>
+        </div>
+    </header>
+    <main class="container">
+        <section class="student-input">
+            <div class="input-group">
+                <label for="maleNames">أسماء الطلاب الذكور</label>
+                <textarea id="maleNames" placeholder="الصق الأسماء هنا، اسم كل طالب في سطر"></textarea>
+                <p>عدد الطلاب الذكور: <span id="maleCount">0</span></p>
+            </div>
+            <div class="input-group">
+                <label for="femaleNames">أسماء الطالبات الإناث</label>
+                <textarea id="femaleNames" placeholder="الصق الأسماء هنا، اسم كل طالبة في سطر"></textarea>
+                <p>عدد الطالبات الإناث: <span id="femaleCount">0</span></p>
+            </div>
+        </section>
+        <section class="configuration">
+            <div class="select-group">
+                <label for="mandatoryMonths">عدد الشهور الإجبارية في المركز</label>
+                <select id="mandatoryMonths">
+                    <option value="1">1 شهر</option>
+                    <option value="2">2 شهر</option>
+                    <option value="3">3 شهور</option>
+                    <option value="4">4 شهور</option>
+                    <option value="6">6 شهور</option>
+                    <option value="12">12 شهر</option>
+                </select>
+            </div>
+        </section>
+        <section class="period-counts" id="periodCountsContainer">
+            <h2>توزيع أعداد الطلاب لكل فترة إجبارية</h2>
+            <!-- سيتم ملء هذا بالـ JS -->
+        </section>
+        <section class="department-counts">
+            <h2>أعداد الطلاب المطلوبين في كل قسم شهرياً</h2>
+            <table id="departmentInputs">
+                <thead>
+                    <tr>
+                        <th>القسم</th>
+                        <th>ذكور</th>
+                        <th>إناث</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- سيتم ملء هذا بالـ JS مع العدادات التلقائية -->
+                </tbody>
+            </table>
+            <p>مجموع الطلاب المدخلين في الأقسام: <span id="totalDepCount">0</span> / <span id="targetTotalCount">0</span></p>
+        </section>
+        <section class="extra-features">
+            <div class="input-group">
+                <label for="electrotherapyCount">عدد الطلاب لمسؤولي العلاج الكهربائي أسبوعياً</label>
+                <input type="number" id="electrotherapyCount" min="0">
+            </div>
+        </section>
+        <div class="actions">
+            <button id="generateDistribution">إنشاء التوزيع العشوائي النهائي</button>
+            <button id="printPDF" disabled>طباعة التوزيع (PDF)</button>
+        </div>
+        <section class="results" id="resultsContainer">
+            <!-- سيتم ملء هذا بالـ JS بالجداول النهائية -->
+        </section>
+    </main>
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 نظام توزيع طلاب الامتياز. جميع الحقوق محفوظة.</p>
+        </div>
+    </footer>
+</body>
+</html>
