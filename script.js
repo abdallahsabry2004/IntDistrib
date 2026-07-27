@@ -491,7 +491,7 @@ function printAdminTable() {
         h3 { color: #1e3a8a; }
     </style></head><body>`;
     
-    adminHtml += `<h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    adminHtml += `<h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
