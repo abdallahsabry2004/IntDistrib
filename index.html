@@ -46,7 +46,23 @@
                         <option value="12">12 شهر (مجموعة واحدة)</option>
                     </select>
                 </div>
-                
+                <div class="input-group">
+    <label for="startMonth">شهر بداية الامتياز (Start Month)</label>
+    <select id="startMonth">
+        <option value="0">يناير</option>
+        <option value="1">فبراير</option>
+        <option value="2">مارس</option>
+        <option value="3">أبريل</option>
+        <option value="4">مايو</option>
+        <option value="5">يونيو</option>
+        <option value="6">يوليو</option>
+        <option value="7">أغسطس</option>
+        <option value="8">سبتمبر</option>
+        <option value="9">أكتوبر</option>
+        <option value="10">نوفمبر</option>
+        <option value="11">ديسمبر</option>
+    </select>
+</div>
                 <!-- الملخص وجدول الفترات التفصيلي -->
                 <div id="periodSummaryContainer" class="summary-box"></div>
                 <div id="detailedPeriodTable" class="table-responsive" style="margin-top: 15px;"></div>
@@ -107,10 +123,12 @@
             <h2>الجداول النهائية لتوزيع طلاب الامتياز</h2>
         </div>
         
-        <div class="no-print actions" id="printActions" style="display: none; text-align: center; margin-bottom: 20px;">
-            <button class="btn-success" onclick="window.print()">طباعة كـ PDF (Print)</button>
-            <p class="hint">نصيحة للطباعة: تأكد من اختيار "Landscape" و "Scale: Default" في إعدادات الطابعة.</p>
-        </div>
+        <div class="no-print actions" id="printActions" style="display: none; text-align: center; margin-bottom: 20px; gap: 10px; justify-content: center; flex-wrap: wrap;">
+    <button class="btn-success" onclick="window.print()">طباعة كـ PDF (Print)</button>
+    <button class="btn-primary" onclick="exportToWord()">تنزيل كملف Word</button>
+    <button class="btn-primary" style="background-color: #4b5563;" onclick="printAdminTable()">طباعة لشئون الامتياز</button>
+    <p class="hint" style="width: 100%;">نصيحة للطباعة: تأكد من اختيار "Landscape" و "Scale: Default" في إعدادات الطابعة.</p>
+</div>
 
         <div id="resultsContainer">
             <!-- سيتم إضافة الجداول هنا -->
