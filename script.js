@@ -473,7 +473,9 @@ function exportToWord() {
     document.body.removeChild(downloadLink);
 }
 
-// دالة طباعة كشف شئون الامتياز
+// ============================================================================
+// 1. دالة طباعة كشف شئون الامتياز (محدثة بتنسيق الصفحات)
+// ============================================================================
 function printAdminTable() {
     if (window.lastDistributionData.length === 0) {
         alert("يرجى إنشاء التوزيع العشوائي أولاً!");
@@ -482,6 +484,7 @@ function printAdminTable() {
     
     const startMonthIdx = parseInt(document.getElementById('startMonth').value);
     
+    // إعداد هيكل الـ HTML مع CSS مخصص للطباعة لمنع انقسام الجداول
     let adminHtml = `<html><head><title>كشف أسماء طلاب الامتياز</title><style>
         body { font-family: 'Cairo', sans-serif; direction: rtl; padding: 20px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
@@ -489,9 +492,17 @@ function printAdminTable() {
         th { background-color: #f3f4f6; }
         h2 { text-align: center; margin-bottom: 20px; }
         h3 { color: #1e3a8a; }
+        /* الكلاس الجديد لضمان عدم انقسام الفترة في منتصف الورقة */
+        .period-section { 
+            page-break-inside: avoid; /* يمنع انقسام الجدول الواحد بين صفحتين */
+            page-break-after: always; /* يجعل كل فترة تبدأ في صفحة جديدة */
+        }
+        .period-section:last-child {
+            page-break-after: auto; /* إلغاء فاصل الصفحة بعد آخر فترة */
+        }
     </style></head><body>`;
     
-    adminHtml += `<h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
+    adminHtml += `<h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
@@ -500,13 +511,15 @@ function printAdminTable() {
             monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
         }
         
+        // تغليف كل فترة بـ div يحمل الكلاس الخاص بالطباعة
+        adminHtml += `<div class="period-section">`;
         adminHtml += `<h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3>`;
         adminHtml += `<table>
                         <thead>
                             <tr>
-                                <th>م</th>
-                                <th>اسم الطالب</th>
-                                <th>النوع</th>
+                                <th style="width: 10%;">م</th>
+                                <th style="width: 60%;">اسم الطالب</th>
+                                <th style="width: 30%;">النوع</th>
                             </tr>
                         </thead>
                         <tbody>`;
@@ -517,26 +530,162 @@ function printAdminTable() {
         data.females.forEach(name => {
             adminHtml += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`;
         });
-        adminHtml += `</tbody></table>`;
+        adminHtml += `</tbody></table></div>`;
     });
     
     adminHtml += `</body></html>`;
     
-    // فتح نافذة جديدة للطباعة
     let printWin = window.open('', '_blank');
     printWin.document.write(adminHtml);
     printWin.document.close();
     printWin.focus();
     
-    // الانتظار حتى يتم تحميل محتوى النافذة بالكامل ثم فتح مربع الطباعة
     printWin.onload = function() {
         printWin.print();
     };
-    
-    // إغلاق النافذة فقط بعد انتهاء أمر الطباعة أو إغلاق مربع الطباعة
     printWin.onafterprint = function() {
         printWin.close();
     };
+}
+
+// ============================================================================
+// 2. دالة تصدير شئون الامتياز إلى ملف Word (.doc)
+// ============================================================================
+function exportAdminToWord() {
+    if (window.lastDistributionData.length === 0) {
+        alert("يرجى إنشاء التوزيع العشوائي أولاً!");
+        return;
+    }
+    
+    const startMonthIdx = parseInt(document.getElementById('startMonth').value);
+    
+    // إعداد CSS مخصص لـ Microsoft Word (MSO)
+    let css = `
+        <style>
+            @page WordSection1 {
+                size: 595.3pt 841.9pt; /* حجم A4 رأسي (Portrait) لأنه مناسب أكثر للقوائم */
+                margin: 0.5in 0.5in 0.5in 0.5in;
+            }
+            div.WordSection1 { page: WordSection1; direction: rtl; font-family: 'Cairo', sans-serif; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; direction: rtl; }
+            th, td { border: 1pt solid windowtext; padding: 8pt; }
+            th { background-color: #f3f4f6; font-weight: bold; color: #1e3a8a; }
+            h2 { text-align: center; margin-bottom: 20px; color: #000; }
+            h3 { color: #1e3a8a; text-align: right; }
+            /* إجبار الوورد على بدء صفحة جديدة لكل فترة */
+            .page-break { mso-special-character: line-break; page-break-before: always; }
+        </style>
+    `;
+
+    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head>
+    <body><div class="WordSection1">
+    <h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+
+    window.lastDistributionData.forEach((data, index) => {
+        let periodStartAbsolute = index * data.mandatoryMonths;
+        let monthNames = [];
+        for (let m = 0; m < data.mandatoryMonths; m++) {
+            monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
+        }
+        
+        if (index > 0) {
+            html += `<br clear="all" class="page-break" />`; // فاصل صفحات لملف الوورد
+        }
+        
+        html += `<h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3>`;
+        html += `<table>
+                    <thead>
+                        <tr>
+                            <th>م</th>
+                            <th>اسم الطالب</th>
+                            <th>النوع</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+        let count = 1;
+        data.males.forEach(name => {
+            html += `<tr><td>${count++}</td><td>${name}</td><td>ذكر</td></tr>`;
+        });
+        data.females.forEach(name => {
+            html += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`;
+        });
+        html += `</tbody></table>`;
+    });
+
+    html += `</div></body></html>`;
+    
+    let blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    let url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
+    let downloadLink = document.createElement("a");
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url;
+    downloadLink.download = 'كشف_شئون_الامتياز.doc';
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+// ============================================================================
+// 3. دالة تصدير شئون الامتياز إلى ملف Excel (.xlsx)
+// ============================================================================
+function exportAdminToExcel() {
+    if (window.lastDistributionData.length === 0) {
+        alert("يرجى إنشاء التوزيع العشوائي أولاً!");
+        return;
+    }
+    
+    // التحقق من وجود مكتبة SheetJS
+    if (typeof XLSX === 'undefined') {
+        alert("حدث خطأ: مكتبة Excel لم يتم تحميلها بشكل صحيح. يرجى التأكد من اتصالك بالإنترنت.");
+        return;
+    }
+    
+    const startMonthIdx = parseInt(document.getElementById('startMonth').value);
+    
+    // إنشاء ملف Excel جديد
+    let wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] }; // ضبط الملف ليكون من اليمين لليسار
+
+    window.lastDistributionData.forEach((data, index) => {
+        let periodStartAbsolute = index * data.mandatoryMonths;
+        let monthNames = [];
+        for (let m = 0; m < data.mandatoryMonths; m++) {
+            monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
+        }
+        
+        // تجهيز البيانات التي ستدخل في الـ Sheet (مصفوفة ثنائية الأبعاد)
+        let wsData = [
+            [`كشف أسماء طلاب الامتياز - الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})`],
+            [], // سطر فارغ
+            ['م', 'اسم الطالب', 'النوع'] // ترويسة الجدول
+        ];
+        
+        let count = 1;
+        data.males.forEach(name => {
+            wsData.push([count++, name, 'ذكر']);
+        });
+        data.females.forEach(name => {
+            wsData.push([count++, name, 'أنثى']);
+        });
+
+        // تحويل المصفوفة إلى Sheet
+        let ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        // ضبط عرض الأعمدة ليكون مناسباً
+        ws['!cols'] = [
+            { wch: 5 },   // عمود "م"
+            { wch: 40 },  // عمود "اسم الطالب"
+            { wch: 15 }   // عمود "النوع"
+        ];
+
+        // إضافة الـ Sheet لملف الـ Excel (تسمية كل Sheet برقم الفترة)
+        // الحد الأقصى لاسم الـ Sheet هو 31 حرف في Excel
+        let sheetName = `الفترة ${index + 1}`; 
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+    
+    // تنزيل الملف بصيغة .xlsx
+    XLSX.writeFile(wb, 'كشف_شئون_الامتياز.xlsx');
 }
 
 window.onload = () => {
