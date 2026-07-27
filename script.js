@@ -394,12 +394,69 @@ function generateDistribution() {
     document.getElementById('printArea').scrollIntoView({ behavior: 'smooth' });
 }
 
-// دالة تصدير النتيجة كملف Word
+// دالة تصدير النتيجة كملف Word بتنسيق Landscape مطابق للطباعة
 function exportToWord() {
-    let preHtml = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
-    let postHtml = "</body></html>";
-    let html = preHtml + document.getElementById('resultsContainer').innerHTML + postHtml;
+    // إضافة CSS مخصص لبرنامج Microsoft Word لضبط الـ Landscape والألوان
+    let css = `
+        <style>
+            @page WordSection1 {
+                size: 841.9pt 595.3pt; /* A4 Landscape */
+                mso-page-orientation: landscape;
+                margin: 0.5in 0.5in 0.5in 0.5in;
+            }
+            div.WordSection1 { 
+                page: WordSection1; 
+                direction: rtl; 
+                font-family: 'Cairo', sans-serif; 
+            }
+            table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 20px; 
+                text-align: center; 
+                direction: rtl; 
+            }
+            th, td { 
+                border: 1pt solid windowtext; 
+                padding: 5pt; 
+                vertical-align: top; 
+            }
+            th { 
+                background-color: #f3f4f6; 
+                font-weight: bold; 
+                color: #1e3a8a;
+            }
+            h3, h4 { 
+                color: #1e3a8a; 
+                text-align: right; 
+                border-bottom: 1pt solid #1e3a8a;
+                padding-bottom: 5pt;
+            }
+            ol { 
+                margin: 0; 
+                padding-right: 20px; 
+                text-align: right; 
+            }
+        </style>
+    `;
+
+    // تجهيز الهيكل الأساسي لملف الوورد
+    let preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+        <meta charset='utf-8'>
+        <title>التوزيع النهائي لطلاب الامتياز</title>
+        ${css}
+    </head>
+    <body>
+        <div class="WordSection1">`;
+
+    let postHtml = `</div></body></html>`;
+
+    // سحب الجداول من الموقع
+    let content = document.getElementById('resultsContainer').innerHTML;
+    let html = preHtml + content + postHtml;
     
+    // إنشاء الملف وتحميله
     let blob = new Blob(['\ufeff', html], { type: 'application/msword' });
     let url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
     
@@ -407,10 +464,10 @@ function exportToWord() {
     document.body.appendChild(downloadLink);
     
     if (navigator.msSaveOrOpenBlob) {
-        navigator.msSaveOrOpenBlob(blob, 'التوزيع_النهائي.doc');
+        navigator.msSaveOrOpenBlob(blob, 'التوزيع_النهائي_للامتياز.doc');
     } else {
         downloadLink.href = url;
-        downloadLink.download = 'التوزيع_النهائي.doc';
+        downloadLink.download = 'التوزيع_النهائي_للامتياز.doc';
         downloadLink.click();
     }
     document.body.removeChild(downloadLink);
@@ -431,6 +488,7 @@ function printAdminTable() {
         th, td { border: 1px solid #000; padding: 10px; text-align: center; }
         th { background-color: #f3f4f6; }
         h2 { text-align: center; margin-bottom: 20px; }
+        h3 { color: #1e3a8a; }
     </style></head><body>`;
     
     adminHtml += `<h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
@@ -465,15 +523,20 @@ function printAdminTable() {
     adminHtml += `</body></html>`;
     
     // فتح نافذة جديدة للطباعة
-    let printWin = window.open('', '', 'width=800,height=600');
+    let printWin = window.open('', '_blank');
     printWin.document.write(adminHtml);
     printWin.document.close();
     printWin.focus();
-    // تأخير بسيط لضمان تحميل النافذة قبل الطباعة
-    setTimeout(() => {
+    
+    // الانتظار حتى يتم تحميل محتوى النافذة بالكامل ثم فتح مربع الطباعة
+    printWin.onload = function() {
         printWin.print();
+    };
+    
+    // إغلاق النافذة فقط بعد انتهاء أمر الطباعة أو إغلاق مربع الطباعة
+    printWin.onafterprint = function() {
         printWin.close();
-    }, 250);
+    };
 }
 
 window.onload = () => {
