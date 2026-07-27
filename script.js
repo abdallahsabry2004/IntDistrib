@@ -490,8 +490,8 @@ function printAdminTable() {
         table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
         th, td { border: 1px solid #000; padding: 10px; text-align: center; }
         th { background-color: #f3f4f6; }
-        h2 { text-align: center; margin-bottom: 20px; }
-        h3 { color: #1e3a8a; }
+        h2 { text-align: center; margin-bottom: 20px; page-break-after: avoid; }
+        h3 { color: #1e3a8a; page-break-after: avoid; }
         /* الكلاس الجديد لضمان عدم انقسام الفترة في منتصف الورقة */
         .period-section { 
             page-break-inside: avoid; /* يمنع انقسام الجدول الواحد بين صفحتين */
@@ -502,7 +502,7 @@ function printAdminTable() {
         }
     </style></head><body>`;
     
-    adminHtml += `<h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    adminHtml += `<h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
@@ -580,7 +580,7 @@ function exportAdminToWord() {
     let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head>
     <body><div class="WordSection1">
-    <h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    <h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
