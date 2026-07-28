@@ -264,7 +264,7 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-// دالة المحاكاة (Best-of-N Iterations) للحصول على أفضل توزيع بأقل تكرار ممكن
+// نظام المحاكاة الذكي (Best-of-N Iterations)
 function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
     let bestSim = null;
     let lowestPenalty = Infinity;
@@ -279,7 +279,6 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
         for (let m = 1; m <= mandatoryMonths; m++) {
             let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, groupM.length, groupF.length);
             
-            // محاولة التوزيع بدون تكرار
             let maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, false);
             if (!maleAssign.success) maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, true);
             
@@ -326,7 +325,7 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// الترتيب الاستباقي (Priority Sorting / Look-ahead)
+// دالة الترتيب الاستباقي المصححة (Priority Sorting / Look-ahead)
 function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
     if (requiredCount === 0) return [];
     
@@ -341,10 +340,10 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         return true;
     });
 
-    // إعطاء أولوية للطلاب اللي هينزلوا الحكيم في الشهور التانية
+    // تم تصحيح طريقة الوصول لـ monthAssignments لتجنب خطأ undefined
     validAvailable.sort((a, b) => {
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
         return scoreB - scoreA;
     });
 
@@ -375,8 +374,8 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
 
         if (deptsWithAvailable.length === 0) break;
 
-        let randDept = deptsWithAvailable[0]; // تم اختيار أول قسم لوجود الأولوية
-        let student = byDept[randDept].shift(); // السحب من بداية المصفوفة المرتبة
+        let randDept = deptsWithAvailable[0]; 
+        let student = byDept[randDept].shift(); 
         picked.push(student);
         deptCounts[randDept]++;
     }
@@ -384,23 +383,22 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     return picked; 
 }
 
-// دالة لسحب طلاب مكررين لسد عجز العلاج الكهربائي
+// دالة سحب الطلاب المكررين لتعويض العجز
 function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
     if (requiredCount === 0) return [];
     
-    // سحب من الـ usedGlobal بس بشرط ميكنش قسم الحكيم وميكنش متسجل في نفس الاسبوع
     let availableForRepeat = usedGlobal.filter(s => pool.includes(s)); 
     let validForRepeat = availableForRepeat.filter(s => {
         let dept = monthAssignments[s];
         if (!dept || dept === 'قسم (الحكيم)') return false;
         
-        // هل الطالب متسجل في نفس الأسبوع؟
         let conflictThisWeek = window.electroRegistry.some(r => r.name === s && r.p === currentP && r.m === currentM && r.w === currentW);
         return !conflictThisWeek;
     });
 
     return shuffle(validForRepeat).slice(0, requiredCount);
 }
+
 
 // ============================================================================
 // الخوارزمية الرئيسية (Main Generation)
@@ -511,7 +509,6 @@ async function generateDistribution() {
             for (let group of periodGroups) {
                 if (fatalErrorOccurred) break;
 
-                // هنا تم تصحيح تمرير المتغيرات لدالة المحاكاة (group.m و group.f بدلاً من group)
                 let simResult = simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
                 
                 if (!simResult.schedules) {
