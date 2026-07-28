@@ -510,20 +510,20 @@ async function generateDistribution() {
                         
                         if (maleAssignment.assignments[dept]) {
                             maleAssignment.assignments[dept].forEach(s => {
-                                // تمييز الطالب المكرر بصرياً
+                                // التعديل الجديد: التمييز بلون أحمر فقط للخط بدون خلفية أو حدود أو كلمة مكرر
                                 let isRepeated = maleAssignment.repeatedStudents && maleAssignment.repeatedStudents.includes(s);
-                                let displayStr = isRepeated ? `<span style="color: #b91c1c; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #fca5a5;">${s} (مكرر)</span>` : s;
+                                let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
                                 cellStudents.push(displayStr);
-                                monthAssignments[s] = dept; // حفظ الاسم النظيف بدون الـ HTML عشان الـ Allocator
+                                monthAssignments[s] = dept; // حفظ الاسم النظيف للـ Logic
                             });
                         }
                         if (femaleAssignment.assignments[dept]) {
                             femaleAssignment.assignments[dept].forEach(s => {
-                                // تمييز الطالبة المكررة بصرياً
+                                // التعديل الجديد
                                 let isRepeated = femaleAssignment.repeatedStudents && femaleAssignment.repeatedStudents.includes(s);
-                                let displayStr = isRepeated ? `<span style="color: #b91c1c; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #fca5a5;">${s} (مكرر)</span>` : s;
+                                let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
                                 cellStudents.push(displayStr);
-                                monthAssignments[s] = dept; // حفظ الاسم النظيف
+                                monthAssignments[s] = dept; 
                             });
                         }
                         html += `<td>${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
