@@ -16,7 +16,18 @@
         </header>
 
         <main class="wizard-content">
-            <!-- الخطوة الأولى: إدخال الأسماء -->
+            <section class="step-card" id="step0">
+                <h2>إعدادات نظام العمل الأساسية (Work Schedule Mode)</h2>
+                <div class="input-group">
+                    <label for="workMode">نظام حضور الطلاب للمركز</label>
+                    <select id="workMode">
+                        <option value="full">طوال الأسبوع (مجموعة واحدة يومياً)</option>
+                        <option value="3cont">3 أيام عمل متواصلة (سبت-أحد-إثنين / ثلاثاء-أربعاء-خميس)</option>
+                        <option value="3sep">3 أيام عمل منفصلة (سبت-إثنين-أربعاء / أحد-ثلاثاء-خميس)</option>
+                    </select>
+                </div>
+            </section>
+
             <section class="step-card" id="step1">
                 <h2>1. إدخال بيانات الطلاب (Students Data)</h2>
                 <div class="grid-2">
@@ -33,81 +44,101 @@
                 </div>
             </section>
 
-            <!-- الخطوة الثانية: الإعدادات -->
             <section class="step-card" id="step2">
                 <h2>2. إعدادات الفترات (Rotation Settings)</h2>
-                <div class="input-group">
-                    <label for="mandatoryMonths">عدد الشهور الإجبارية في المركز (Mandatory Duration)</label>
-                    <select id="mandatoryMonths">
-                        <option value="1">شهر واحد (12 مجموعة)</option>
-                        <option value="2">شهران (6 مجموعات)</option>
-                        <option value="3">3 شهور (4 مجموعات)</option>
-                        <option value="4">4 شهور (3 مجموعات)</option>
-                        <option value="6">6 شهور (مجموعتان)</option>
-                        <option value="12">12 شهر (مجموعة واحدة)</option>
-                    </select>
+                <div class="grid-2">
+                    <div class="input-group">
+                        <label for="mandatoryMonths">عدد الشهور الإجبارية في المركز</label>
+                        <select id="mandatoryMonths">
+                            <option value="1">شهر واحد (12 مجموعة)</option>
+                            <option value="2">شهران (6 مجموعات)</option>
+                            <option value="3">3 شهور (4 مجموعات)</option>
+                            <option value="4">4 شهور (3 مجموعات)</option>
+                            <option value="6">6 شهور (مجموعتان)</option>
+                            <option value="12">12 شهر (مجموعة واحدة)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="startMonth">شهر بداية الامتياز</label>
+                        <select id="startMonth">
+                            <option value="0">يناير</option><option value="1">فبراير</option>
+                            <option value="2">مارس</option><option value="3">أبريل</option>
+                            <option value="4">مايو</option><option value="5">يونيو</option>
+                            <option value="6">يوليو</option><option value="7">أغسطس</option>
+                            <option value="8">سبتمبر</option><option value="9">أكتوبر</option>
+                            <option value="10">نوفمبر</option><option value="11">ديسمبر</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="input-group">
-    <label for="startMonth">شهر بداية الامتياز (Start Month)</label>
-    <select id="startMonth">
-        <option value="0">يناير</option>
-        <option value="1">فبراير</option>
-        <option value="2">مارس</option>
-        <option value="3">أبريل</option>
-        <option value="4">مايو</option>
-        <option value="5">يونيو</option>
-        <option value="6">يوليو</option>
-        <option value="7">أغسطس</option>
-        <option value="8">سبتمبر</option>
-        <option value="9">أكتوبر</option>
-        <option value="10">نوفمبر</option>
-        <option value="11">ديسمبر</option>
-    </select>
-</div>
-                <!-- الملخص وجدول الفترات التفصيلي -->
                 <div id="periodSummaryContainer" class="summary-box"></div>
                 <div id="detailedPeriodTable" class="table-responsive" style="margin-top: 15px;"></div>
             </section>
 
-            <!-- الخطوة الثالثة: سعة الأقسام -->
             <section class="step-card" id="step3">
-                <h2>3. السعة الاستيعابية للأقسام شهرياً (Monthly Department Capacity)</h2>
-                <p class="hint">أدخل العدد الأساسي المطلوب لكل قسم في الشهر. أي زيادة في عدد الطلاب سيتم توزيعها عشوائياً.</p>
+                <h2>3. السعة الاستيعابية للأقسام شهرياً (Monthly Capacity)</h2>
                 <div class="table-responsive">
                     <table class="data-table" id="departmentsTable">
                         <thead>
                             <tr>
-                                <th>القسم (Department)</th>
-                                <th>عدد الذكور (Males)</th>
-                                <th>عدد الإناث (Females)</th>
+                                <th>القسم</th>
+                                <th>عدد الذكور</th>
+                                <th>عدد الإناث</th>
+                                <th>الحد الأقصى لطلاب العلاج الكهربائي (أسبوعياً)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- سيتم توليد الأقسام بواسطة جافاسكريبت -->
+                            <!-- Generated via JS -->
                         </tbody>
                         <tfoot>
                             <tr>
-                                <th>المجموع المدخل:</th>
+                                <th>المجموع المدخل (للمجموعة الواحدة):</th>
                                 <th id="totalMaleInput">0</th>
                                 <th id="totalFemaleInput">0</th>
+                                <th>-</th>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
             </section>
 
-            <!-- الخطوة الرابعة: العلاج الكهربائي -->
             <section class="step-card" id="step4">
                 <h2>4. مسؤولو أجهزة العلاج الكهربائي (Electrotherapy Duty)</h2>
-                <p class="hint">يتم اختيارهم أسبوعياً من الطلاب المتواجدين بالمركز، بدون تكرار الطالب إطلاقاً طوال فترة تدريبه.</p>
                 <div class="grid-2">
                     <div class="input-group">
-                        <label for="electroMale">عدد الذكور المطلوب أسبوعياً</label>
+                        <label for="electroMale">ذكور (لكل دورة عمل)</label>
                         <input type="number" id="electroMale" value="0" min="0">
                     </div>
                     <div class="input-group">
-                        <label for="electroFemale">عدد الإناث المطلوب أسبوعياً</label>
+                        <label for="electroFemale">إناث (لكل دورة عمل)</label>
                         <input type="number" id="electroFemale" value="0" min="0">
+                    </div>
+                </div>
+            </section>
+
+            <section class="step-card" id="step5">
+                <h2>5. مسؤولو التاريخ المرضي (Allocator) - اختياري</h2>
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <label style="display:inline-block;"><input type="checkbox" id="enableAllocator"> تفعيل جدول الـ Allocator</label>
+                </div>
+                <div id="allocatorSettings" style="display: none; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                    <div class="grid-2">
+                        <div class="input-group"><label>ذكور مطلوبة</label><input type="number" id="allocMale" value="0"></div>
+                        <div class="input-group"><label>إناث مطلوبة</label><input type="number" id="allocFemale" value="0"></div>
+                        <div class="input-group">
+                            <label>العطلة الأسبوعية</label>
+                            <select id="allocWeekend">
+                                <option value="5,6">الجمعة والسبت</option>
+                                <option value="5">الجمعة فقط</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>تجديد القائمة كل (أيام عمل)</label>
+                            <input type="number" id="allocCycle" value="1" min="1">
+                        </div>
+                        <div class="input-group">
+                            <label>تاريخ بداية أول يوم عمل</label>
+                            <input type="date" id="allocStartDate">
+                        </div>
                     </div>
                 </div>
             </section>
@@ -118,30 +149,20 @@
         </main>
     </div>
 
-    <!-- منطقة عرض النتائج والطباعة -->
     <div id="printArea">
-        <div class="print-header">
-            <h2>الجداول النهائية لتوزيع طلاب الامتياز</h2>
-        </div>
+        <div class="print-header"><h2>الجداول النهائية لتوزيع طلاب الامتياز</h2></div>
         
         <div class="no-print actions" id="printActions" style="display: none; text-align: center; margin-bottom: 20px; gap: 10px; justify-content: center; flex-wrap: wrap;">
-    <!-- أزرار التوزيع الأساسي -->
-    <button class="btn-success" onclick="window.print()">طباعة التوزيع (PDF)</button>
-    <button class="btn-primary" onclick="exportToWord()">تنزيل التوزيع (Word)</button>
-    
-    <!-- أزرار شؤون الامتياز الجديدة -->
-    <div style="width: 100%; height: 10px;"></div> <!-- فاصل بصري -->
-    
-    <button class="btn-primary" style="background-color: #4b5563;" onclick="printAdminTable()">طباعة لشئون الامتياز</button>
-    <button class="btn-primary" style="background-color: #2563eb;" onclick="exportAdminToWord()">شئون الامتياز (Word)</button>
-    <button class="btn-primary" style="background-color: #16a34a;" onclick="exportAdminToExcel()">شئون الامتياز (Excel)</button>
-    
-    <p class="hint" style="width: 100%; margin-top: 15px;">نصيحة للطباعة: تأكد من اختيار "Landscape" و "Scale: Default" في إعدادات الطابعة.</p>
-</div>
-
-        <div id="resultsContainer">
-            <!-- سيتم إضافة الجداول هنا -->
+            <button class="btn-success" onclick="window.print()">طباعة التوزيع (PDF)</button>
+            <button class="btn-primary" onclick="exportToWord()">تنزيل التوزيع (Word)</button>
+            <div style="width: 100%; height: 10px;"></div>
+            <button class="btn-primary" style="background-color: #4b5563;" onclick="printAdminTable()">طباعة لشئون الامتياز</button>
+            <button class="btn-primary" style="background-color: #2563eb;" onclick="exportAdminToWord()">شئون الامتياز (Word)</button>
+            <button class="btn-primary" style="background-color: #16a34a;" onclick="exportAdminToExcel()">شئون الامتياز (Excel)</button>
+            <p class="hint" style="width: 100%;">نصيحة: تأكد من اختيار "Landscape" و "Scale: Default" في إعدادات الطابعة.</p>
         </div>
+
+        <div id="resultsContainer"></div>
     </div>
 </body>
 </html>
