@@ -4,7 +4,7 @@
 window.globalDistributionPlan = { males: [], females: [] };
 window.lastDistributionData = [];
 window.publicHolidays = [];
-window.electroRegistry = []; // السجل العام للعلاج الكهربائي
+window.electroRegistry = []; 
 
 const departmentsList = [
     'قسم الباطنة', 'قسم الجراحة والحروق', 'قسم صحة المرأة', 
@@ -38,7 +38,6 @@ function buildDepartmentsTable() {
     if (!tbody) return;
     tbody.innerHTML = '';
     departmentsList.forEach((dept, index) => {
-        // إنشاء خانتين منفصلتين للحد الأقصى (ذكور وإناث)
         let maxInputM = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max-m" data-index="${index}" placeholder="لا حد أقصى">`;
         let maxInputF = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max-f" data-index="${index}" placeholder="لا حد أقصى">`;
         
@@ -251,6 +250,8 @@ async function fetchPublicHolidays(year) {
 }
 
 function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray) {
+    if (requiredCount === 0) return [];
+    
     let available = pool.filter(s => !usedGlobal.includes(s));
     let validAvailable = available.filter(s => {
         let dept = monthAssignments[s];
@@ -261,8 +262,6 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         if (cap === 0) return false; 
         return true;
     });
-
-    if (validAvailable.length < requiredCount) return null; 
 
     let picked = [];
     let deptCounts = {};
@@ -297,8 +296,7 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         deptCounts[randDept]++;
     }
 
-    if (picked.length < requiredCount) return null;
-    return picked;
+    return picked; // إرجاع القائمة حتى وإن كان بها عجز
 }
 
 // ============================================================================
@@ -330,7 +328,6 @@ async function generateDistribution() {
         let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
         let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
         
-        // قراءة المصفوفات المنفصلة للحد الأقصى للعلاج الكهربائي
         let electroMaxCapsM = Array.from(document.querySelectorAll('.dept-electro-max-m')).map(inp => {
             if(inp.value === "") return -1; 
             return parseInt(inp.value);
@@ -443,30 +440,31 @@ async function generateDistribution() {
                 html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
                 
                 for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
-                    
+                  html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
+                   
                     for (let m = 1; m <= mandatoryMonths; m++) {
                         let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                         html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                         let monthAssig = gInfo.schedules[m-1];
 
                         for (let w = 1; w <= 4; w++) {
-                            // استخدام المصفوفات المنفصلة للذكور والإناث
                             let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCapsM);
                             let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCapsF);
                             
-                            if ((!pickedM && electroMaleReq > 0) || (!pickedF && electroFemaleReq > 0)) {
-                                alert(`⚠️ [تحليل النظام: فشل تسكين العلاج الكهربائي]\nالقيود التي حددتها للأقسام منعت تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالعملية توقفت. يرجى تعديل الإعدادات.`);
-                                return;
+                            if (pickedM.length < electroMaleReq || pickedF.length < electroFemaleReq) {
+                                let msg = `⚠️ [تحليل النظام: عجز في العلاج الكهربائي]\nلم يتم تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالقيود التي حددتها تمنع إكمال العدد، أو تم استنفاذ الطلاب المتاحين.\n\nهل تريد الاستمرار وترك العجز كما هو في هذا الأسبوع؟`;
+                                if (!confirm(msg)) {
+                                    return;
+                                }
                             }
                             
                             let weekList = [];
-                            if (pickedM) { 
+                            if (pickedM.length > 0) { 
                                 pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
                                 globalUsedElectroMales.push(...pickedM); 
                                 weekList.push(...pickedM); 
                             }
-                            if (pickedF) { 
+                            if (pickedF.length > 0) { 
                                 pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
                                 globalUsedElectroFemales.push(...pickedF); 
                                 weekList.push(...pickedF); 
@@ -476,6 +474,13 @@ async function generateDistribution() {
                         }
                         html += `</tr>`;
                     }
+                    
+                    // طباعة فائض العلاج الكهربائي
+                    let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !globalUsedElectroMales.includes(s) && !globalUsedElectroFemales.includes(s));
+                    if (unassignedElectro.length > 0) {
+                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم استهلاكهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
+                    }
+                    
                     html += `</tbody></table></div>`;
                 }
             }
@@ -511,13 +516,23 @@ async function generateDistribution() {
                             continue;
                         }
 
+                        // تصحيح حساب تاريخ نهاية الدورة بتخطي العطلات بداخل الدورة
                         let endDate = new Date(allocatorCurrentDate);
-                        endDate.setDate(endDate.getDate() + allocCycle - 1);
+                        let addedDays = 1;
+                        while(addedDays < allocCycle) {
+                            endDate.setDate(endDate.getDate() + 1);
+                            let endIsWknd = allocWeekends.includes(endDate.getDay());
+                            let endHol = window.publicHolidays.find(h => h.date === endDate.toISOString().split('T')[0]);
+                            if(!endIsWknd && !endHol) {
+                                addedDays++;
+                            }
+                        }
                         let endDateString = endDate.toISOString().split('T')[0];
 
                         if (deficitOccurred) {
                             uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
-                            allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                            allocatorCurrentDate = new Date(endDate);
+                            allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                             daysAssigned += allocCycle;
                             continue;
                         }
@@ -549,7 +564,8 @@ async function generateDistribution() {
                             if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { 
                                 deficitOccurred = true;
                                 uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
-                                allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                                allocatorCurrentDate = new Date(endDate);
+                                allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                                 daysAssigned += allocCycle;
                                 continue;
                             } else { return; }
@@ -568,7 +584,8 @@ async function generateDistribution() {
                             cycleDays: allocCycle
                         });
                         
-                        allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                        allocatorCurrentDate = new Date(endDate);
+                        allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                         daysAssigned += allocCycle;
                     }
                     
