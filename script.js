@@ -402,7 +402,6 @@ function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, 
     return shuffle(validForRepeat).slice(0, requiredCount);
 }
 
-
 // ============================================================================
 // الخوارزمية الرئيسية (Main Generation)
 // ============================================================================
@@ -512,15 +511,14 @@ async function generateDistribution() {
             for (let group of periodGroups) {
                 if (fatalErrorOccurred) break;
 
-                // استدعاء نظام المحاكاة للحصول على المسار الأمثل (بدون أو بأقل تكرار)
-                let simResult = simulatePeriodDepartments(group, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
+                // هنا تم تصحيح تمرير المتغيرات لدالة المحاكاة (group.m و group.f بدلاً من group)
+                let simResult = simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
                 
                 if (!simResult.schedules) {
                     alert(`⚠️ فشل رياضي في توزيع المجموعة: ${group.name}. السعة المتاحة أقل من عدد الدفعة. الرجاء مراجعة سعة الأقسام.`);
                     fatalErrorOccurred = true; break;
                 }
 
-                // طلب الإذن لو كان المسار الأمثل يحتوي على تكرار إجباري
                 if (simResult.penalty > 0) {
                     let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام للمجموعة ${group.name}]\n\n`;
                     msg += `تم تنفيذ 50 محاكاة عشوائية، ولكن لا توجد سعة كافية لمنع التكرار تماماً في هذه الفترة.\n`;
@@ -583,7 +581,6 @@ async function generateDistribution() {
                         let monthAssig = gInfo.schedules[m-1];
 
                         for (let w = 1; w <= 4; w++) {
-                            // استخدام الترتيب الاستباقي
                             let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1);
                             let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1);
                             
@@ -608,7 +605,6 @@ async function generateDistribution() {
                             if (pickedM && pickedM.length > 0) { 
                                 pickedM.forEach(s => {
                                     window.electroRegistry.push({name: s, p: p, m: m, w: w});
-                                    // إذا كان الطالب موجود مسبقاً في السجل، فهو مكرر
                                     let isRep = periodUsedElectroMales.includes(s);
                                     if (!isRep) periodUsedElectroMales.push(s);
                                     weekList.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
