@@ -1,33 +1,35 @@
-// --- Global State ---
 window.globalDistributionPlan = { males: [], females: [] };
-window.lastDistributionData = []; // لحفظ البيانات لاستخدامها في طباعة شئون الامتياز
+window.lastDistributionData = [];
+window.publicHolidays = [];
 
-// بيانات الأقسام وأسماء الشهور
 const departmentsList = [
     'قسم الباطنة', 'قسم الجراحة والحروق', 'قسم صحة المرأة', 
     'قسم العظام', 'قسم الأعصاب', 'قسم الأطفال', 'قسم (الحكيم)'
 ];
 const arabicMonths = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
-// الاستماع لتغييرات الأسماء لتحديث العداد
 document.getElementById('maleNames').addEventListener('input', updateCounts);
 document.getElementById('femaleNames').addEventListener('input', updateCounts);
 document.getElementById('mandatoryMonths').addEventListener('change', updatePeriodSummary);
+document.getElementById('workMode').addEventListener('change', updatePeriodSummary);
+document.getElementById('enableAllocator').addEventListener('change', function() {
+    document.getElementById('allocatorSettings').style.display = this.checked ? 'block' : 'none';
+});
 
-// بناء جدول إدخال سعة الأقسام
 function buildDepartmentsTable() {
     const tbody = document.querySelector('#departmentsTable tbody');
     tbody.innerHTML = '';
     departmentsList.forEach((dept, index) => {
+        let maxInput = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max" data-index="${index}" placeholder="لا حد أقصى">`;
         tbody.innerHTML += `
             <tr>
                 <td>${dept}</td>
                 <td><input type="number" class="dept-male" data-index="${index}" value="0" min="0"></td>
                 <td><input type="number" class="dept-female" data-index="${index}" value="0" min="0"></td>
+                <td>${maxInput}</td>
             </tr>
         `;
     });
-
     document.querySelectorAll('.dept-male, .dept-female').forEach(input => {
         input.addEventListener('input', calculateTotals);
     });
@@ -36,23 +38,19 @@ function buildDepartmentsTable() {
 function updateCounts() {
     const males = document.getElementById('maleNames').value.split('\n').filter(n => n.trim() !== '');
     const females = document.getElementById('femaleNames').value.split('\n').filter(n => n.trim() !== '');
-    
     document.getElementById('maleCount').innerText = males.length;
     document.getElementById('femaleCount').innerText = females.length;
     updatePeriodSummary(); 
 }
 
 function calculateTotals() {
-    let totalMale = 0;
-    let totalFemale = 0;
+    let totalMale = 0, totalFemale = 0;
     document.querySelectorAll('.dept-male').forEach(i => totalMale += (parseInt(i.value) || 0));
     document.querySelectorAll('.dept-female').forEach(i => totalFemale += (parseInt(i.value) || 0));
-    
     document.getElementById('totalMaleInput').innerText = totalMale;
     document.getElementById('totalFemaleInput').innerText = totalFemale;
 }
 
-// دالة الخلط العشوائي (Fisher-Yates Shuffle)
 function shuffle(array) {
     let currentIndex = array.length, randomIndex;
     while (currentIndex !== 0) {
@@ -63,34 +61,24 @@ function shuffle(array) {
     return array;
 }
 
-// دالة لتوزيع العدد الكلي بشكل عشوائي على الفترات (Cohort Division)
 function getRandomDistributedCounts(total, bins) {
     if (bins === 0) return [];
     let base = Math.floor(total / bins);
     let remainder = total % bins;
     let counts = Array(bins).fill(base);
-    
-    let indices = Array.from({ length: bins }, (_, i) => i);
-    let shuffledIndices = shuffle(indices);
-    
-    for (let i = 0; i < remainder; i++) {
-        counts[shuffledIndices[i]]++;
-    }
+    let indices = shuffle(Array.from({ length: bins }, (_, i) => i));
+    for (let i = 0; i < remainder; i++) counts[indices[i]]++;
     return counts;
 }
 
-// دالة توزيع الفائض على الأقسام شهرياً (استثناء الحكيم، وبحد أقصى +1 للقسم)
 function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, targetFemales) {
     let finalMaleCaps = [...baseMaleCaps];
     let finalFemaleCaps = [...baseFemaleCaps];
-    
     let currentMaleSum = finalMaleCaps.reduce((a, b) => a + b, 0);
     let currentFemaleSum = finalFemaleCaps.reduce((a, b) => a + b, 0);
-    
     let maleSurplus = targetMales - currentMaleSum;
     let femaleSurplus = targetFemales - currentFemaleSum;
-    
-    let eligibleIndices = [0, 1, 2, 3, 4, 5];
+    let eligibleIndices = [0, 1, 2, 3, 4, 5]; // الحكيم مستثنى
     
     if (maleSurplus > 0 || femaleSurplus > 0) {
         let safeCounter = 0;
@@ -98,14 +86,8 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
             let shuffledIndices = shuffle([...eligibleIndices]);
             while ((maleSurplus > 0 || femaleSurplus > 0) && shuffledIndices.length > 0) {
                 let randomDeptIdx = shuffledIndices.shift(); 
-                
-                if (maleSurplus > 0) {
-                    finalMaleCaps[randomDeptIdx]++;
-                    maleSurplus--;
-                } else if (femaleSurplus > 0) {
-                    finalFemaleCaps[randomDeptIdx]++;
-                    femaleSurplus--;
-                }
+                if (maleSurplus > 0) { finalMaleCaps[randomDeptIdx]++; maleSurplus--; } 
+                else if (femaleSurplus > 0) { finalFemaleCaps[randomDeptIdx]++; femaleSurplus--; }
             }
             safeCounter++;
         }
@@ -123,17 +105,14 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
         finalFemaleCaps[valid[Math.floor(Math.random() * valid.length)]]--;
         currentFemaleSum--;
     }
-    
     return { males: finalMaleCaps, females: finalFemaleCaps };
 }
 
-// دالة مساعدة لتسكين الطلاب بذكاء (Smart Assignment) لمنع التكرار
 function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) {
     let assignments = {};
     departmentsList.forEach(d => assignments[d] = []);
     let newHistory = JSON.parse(JSON.stringify(currentHistory));
     let caps = [...targetCaps];
-    
     let shuffledStudents = shuffle([...students]);
     let failed = false;
 
@@ -144,255 +123,334 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) 
                 validIndices.push(idx);
             }
         });
-
-        if (validIndices.length === 0) {
-            failed = true;
-            break;
-        }
-
+        if (validIndices.length === 0) { failed = true; break; }
         let chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
         let chosenDept = departmentsList[chosenIdx];
-        
         caps[chosenIdx]--;
         assignments[chosenDept].push(student);
         newHistory[student].push(chosenDept);
     }
-
     return { success: !failed, assignments: assignments, history: newHistory };
 }
 
-// عرض ملخص الفترات 
 function updatePeriodSummary() {
     const months = parseInt(document.getElementById('mandatoryMonths').value);
     const periodsCount = 12 / months;
     const totalMales = parseInt(document.getElementById('maleCount').innerText);
     const totalFemales = parseInt(document.getElementById('femaleCount').innerText);
-
+    const workMode = document.getElementById('workMode').value;
+    
     window.globalDistributionPlan = { males: [], females: [] };
-
     let periodMaleCounts = getRandomDistributedCounts(totalMales, periodsCount);
     let periodFemaleCounts = getRandomDistributedCounts(totalFemales, periodsCount);
 
+    let html = `<strong>معلومة:</strong> سيتم تقسيم الدفعة إلى <strong>${periodsCount} فترات</strong>.<br>`;
+    if (workMode !== 'full') {
+        html += `<strong style="color:red;">تنبيه نظام 3 أيام:</strong> كل فترة سيتم قسمتها داخلياً إلى مجموعتي عمل (أ، ب).<br>الأعداد المطلوبة في الأقسام سيتم تطبيقها بالكامل على مجموعة (أ) وعلى مجموعة (ب) بشكل منفصل.`;
+    }
+    document.getElementById('periodSummaryContainer').innerHTML = html;
+
     let tableHtml = `<table class="data-table mini-table">
-                        <thead>
-                            <tr>
-                                <th>الفترة (Cohort)</th>
-                                <th>عدد الشهور بداخلها</th>
-                                <th>عدد الذكور (بكل شهر)</th>
-                                <th>عدد الإناث (بكل شهر)</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-    
+                        <thead><tr><th>الفترة</th><th>ذكور (بكل شهر)</th><th>إناث (بكل شهر)</th></tr></thead><tbody>`;
     for (let p = 1; p <= periodsCount; p++) {
         let pMales = periodMaleCounts[p - 1];
         let pFemales = periodFemaleCounts[p - 1];
-        
         window.globalDistributionPlan.males.push(pMales);
         window.globalDistributionPlan.females.push(pFemales);
-
-        tableHtml += `<tr>
-                        <td><strong>الفترة ${p}</strong></td>
-                        <td>${months} شهور</td>
-                        <td>${pMales} طالب</td>
-                        <td>${pFemales} طالبة</td>
-                      </tr>`;
+        tableHtml += `<tr><td>الفترة ${p}</td><td>${pMales}</td><td>${pFemales}</td></tr>`;
     }
     tableHtml += `</tbody></table>`;
-    
-    let html = `<strong>معلومة:</strong> سيتم تقسيم الدفعة إلى <strong>${periodsCount} مجموعات (Cohorts)</strong> مغلقة.<br>`;
-    html += `كل مجموعة ستقضي <strong>${months} شهور</strong> متتالية. جميع طلاب المجموعة متواجدون في كل شهر من شهور فترتهم ولكن في أقسام مختلفة.`;
-    
-    document.getElementById('periodSummaryContainer').innerHTML = html;
+    document.getElementById('detailedPeriodTable').innerHTML = (totalMales > 0 || totalFemales > 0) ? tableHtml : '';
+}
 
-    if (totalMales > 0 || totalFemales > 0) {
-        document.getElementById('detailedPeriodTable').innerHTML = tableHtml;
-    } else {
-        document.getElementById('detailedPeriodTable').innerHTML = '';
+// جلب الإجازات من API
+async function fetchPublicHolidays(year) {
+    try {
+        let res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/EG`);
+        let data = await res.json();
+        return data.map(d => ({ date: d.date, name: d.localName || d.name }));
+    } catch (e) {
+        console.warn("فشل في جلب الإجازات:", e);
+        return [];
     }
 }
 
-// الخوارزمية الرئيسية للتوزيع
-function generateDistribution() {
+// اختيار مسؤولي العلاج الكهربائي باحترام القيود
+function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray) {
+    let available = pool.filter(s => !usedGlobal.includes(s));
+    let validAvailable = available.filter(s => {
+        let dept = monthAssignments[s];
+        if (dept === 'قسم (الحكيم)') return false;
+        let deptIdx = departmentsList.indexOf(dept);
+        let cap = maxCapsArray[deptIdx];
+        if (cap === 0) return false;
+        return true;
+    });
+
+    if (validAvailable.length < requiredCount) return null;
+
+    let picked = [];
+    let deptCounts = {};
+    departmentsList.forEach(d => deptCounts[d] = 0);
+
+    // تجميع الطلاب حسب الأقسام
+    let byDept = {};
+    departmentsList.forEach(d => byDept[d] = []);
+    validAvailable.forEach(s => byDept[monthAssignments[s]].push(s));
+
+    let attempts = 0;
+    while (picked.length < requiredCount && attempts < 100) {
+        attempts++;
+        // إذا كان المطلوب أكثر من 1، يجب التنويع
+        let deptsWithAvailable = departmentsList.filter(d => 
+            byDept[d].length > 0 && 
+            (maxCapsArray[departmentsList.indexOf(d)] === -1 || deptCounts[d] < maxCapsArray[departmentsList.indexOf(d)])
+        );
+        
+        // منع السحب من قسم واحد إذا تم السحب منه للتو والمطلوب أكثر من 1
+        if (requiredCount > 1 && picked.length > 0) {
+            let lastDept = monthAssignments[picked[picked.length - 1]];
+            if (deptsWithAvailable.length > 1) {
+                deptsWithAvailable = deptsWithAvailable.filter(d => d !== lastDept || deptsWithAvailable.length === 1);
+            }
+        }
+
+        if (deptsWithAvailable.length === 0) break;
+
+        let randDept = deptsWithAvailable[Math.floor(Math.random() * deptsWithAvailable.length)];
+        let student = shuffle(byDept[randDept]).pop();
+        picked.push(student);
+        deptCounts[randDept]++;
+    }
+
+    if (picked.length < requiredCount) return null;
+    return picked;
+}
+
+// إنشاء التوزيع (Async لدعم الـ API)
+async function generateDistribution() {
     const males = document.getElementById('maleNames').value.split('\n').filter(n => n.trim() !== '');
     const females = document.getElementById('femaleNames').value.split('\n').filter(n => n.trim() !== '');
     const mandatoryMonths = parseInt(document.getElementById('mandatoryMonths').value);
     const startMonthIdx = parseInt(document.getElementById('startMonth').value);
+    const workMode = document.getElementById('workMode').value;
+    const is3Days = workMode !== 'full';
     const numPeriods = 12 / mandatoryMonths;
 
-    if (males.length === 0 && females.length === 0) {
-        alert("يرجى إدخال أسماء الطلاب أولاً.");
-        return;
-    }
+    if (males.length === 0 && females.length === 0) { alert("أدخل أسماء الطلاب أولاً."); return; }
 
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
+    let electroMaxCaps = Array.from(document.querySelectorAll('.dept-electro-max')).map(inp => {
+        if(inp.value === "") return -1; // لا حد أقصى
+        return parseInt(inp.value);
+    });
+    electroMaxCaps[6] = 0; // الحكيم دائماً صفر
 
     let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
     let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
     let cohortMinMales = Math.floor(males.length / numPeriods);
     let cohortMinFemales = Math.floor(females.length / numPeriods);
+    
+    // في نظام 3 أيام، الأقسام تطلب ضعف العدد (مجموعة أ + مجموعة ب)
+    let requiredMalesCheck = is3Days ? sumMaleCaps * 2 : sumMaleCaps;
+    let requiredFemalesCheck = is3Days ? sumFemaleCaps * 2 : sumFemaleCaps;
 
-    if (sumMaleCaps > cohortMinMales || sumFemaleCaps > cohortMinFemales) {
-        let confirmMsg = `⚠️ تنبيه هام: الأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في المجموعة الواحدة!\n\n` +
-                         `📌 المتاح فعلياً في الفترة الواحدة:\n` +
-                         `- ذكور: ${cohortMinMales} | إناث: ${cohortMinFemales}\n\n` +
-                         `❓ هل تريد الاستمرار وإكمال التوزيع (سيتم تقليل الأعداد عشوائياً)؟`;
-        if (!confirm(confirmMsg)) return; 
+    if (requiredMalesCheck > cohortMinMales || requiredFemalesCheck > cohortMinFemales) {
+        if (!confirm(`⚠️ الأعداد المطلوبة للأقسام تفوق المتاح!\nالمتاح في الفترة: ${cohortMinMales} ذكور و ${cohortMinFemales} إناث.\nهل تريد الإكمال وتقليل الأعداد عشوائياً لسد العجز؟`)) return;
     }
 
-    let malePeriods = [];
-    let femalePeriods = [];
-    let shuffledMales = shuffle([...males]);
-    let shuffledFemales = shuffle([...females]);
-    
+    // جلب الإجازات إذا كان الـ Allocator مفعلاً
+    let isAllocator = document.getElementById('enableAllocator').checked;
+    if (isAllocator) {
+        let year = new Date().getFullYear();
+        window.publicHolidays = [...await fetchPublicHolidays(year), ...await fetchPublicHolidays(year + 1)];
+    }
+
+    let malePeriods = [], femalePeriods = [];
+    let shuffledMales = shuffle([...males]), shuffledFemales = shuffle([...females]);
     let mIdx = 0, fIdx = 0;
+    
     for (let i = 0; i < numPeriods; i++) {
         let pMalesCount = window.globalDistributionPlan.males[i];
         let pFemalesCount = window.globalDistributionPlan.females[i];
-
         malePeriods.push(shuffledMales.slice(mIdx, mIdx + pMalesCount));
-        mIdx += pMalesCount;
-        
         femalePeriods.push(shuffledFemales.slice(fIdx, fIdx + pFemalesCount));
-        fIdx += pFemalesCount;
+        mIdx += pMalesCount; fIdx += pFemalesCount;
     }
 
     let html = '';
-    window.lastDistributionData = []; // إعادة تعيين بيانات الكشف
-    
-    // قوائم منع التكرار للعلاج الكهربائي (ثابتة طوال الـ 12 شهر)
-    let globalUsedElectroMales = [];
-    let globalUsedElectroFemales = [];
+    window.lastDistributionData = [];
     
     const electroMaleReq = parseInt(document.getElementById('electroMale').value) || 0;
     const electroFemaleReq = parseInt(document.getElementById('electroFemale').value) || 0;
+    let globalUsedElectroMales = [], globalUsedElectroFemales = [];
 
-    // التوزيع داخل كل فترة (Rotation Loop)
+    // بيانات الـ Allocator
+    let allocMaleReq = parseInt(document.getElementById('allocMale').value) || 0;
+    let allocFemaleReq = parseInt(document.getElementById('allocFemale').value) || 0;
+    let allocCycle = parseInt(document.getElementById('allocCycle').value) || 1;
+    let allocWeekends = document.getElementById('allocWeekend').value.split(',').map(Number);
+    let allocStart = document.getElementById('allocStartDate').value ? new Date(document.getElementById('allocStartDate').value) : null;
+
     for (let p = 0; p < numPeriods; p++) {
-        let cohortMales = malePeriods[p];
-        let cohortFemales = femalePeriods[p];
-        
-        // حفظ البيانات لاستخدامها في طباعة شئون الامتياز
+        let cohortMales = malePeriods[p], cohortFemales = femalePeriods[p];
         window.lastDistributionData.push({ males: cohortMales, females: cohortFemales, mandatoryMonths: mandatoryMonths });
+        
+        let periodGroups = [{ name: 'الفترة بالكامل', m: cohortMales, f: cohortFemales }];
+        if (is3Days) {
+            let mMid = Math.floor(cohortMales.length / 2), fMid = Math.floor(cohortFemales.length / 2);
+            periodGroups = [
+                { name: workMode === '3cont' ? '(مجموعة أ: سبت-أحد-إثنين)' : '(مجموعة أ: سبت-إثنين-أربعاء)', m: cohortMales.slice(0, mMid), f: cohortFemales.slice(0, fMid) },
+                { name: workMode === '3cont' ? '(مجموعة ب: ثلاثاء-أربعاء-خميس)' : '(مجموعة ب: أحد-ثلاثاء-خميس)', m: cohortMales.slice(mMid), f: cohortFemales.slice(fMid) }
+            ];
+        }
 
-        let history = {};
-        cohortMales.concat(cohortFemales).forEach(student => history[student] = []);
-
-        // تحديد أسماء الشهور لهذه الفترة
         let periodStartAbsolute = p * mandatoryMonths;
-        let periodMonthNames = [];
-        for (let m = 0; m < mandatoryMonths; m++) {
-            periodMonthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
-        }
-        let periodMonthsText = periodMonthNames.join(' و ');
-
+        let pMonthsText = Array.from({length: mandatoryMonths}, (_, i) => arabicMonths[(startMonthIdx + periodStartAbsolute + i) % 12]).join(' و ');
+        
         html += `<div class="result-section" style="page-break-after: always; padding-bottom: 20px;">
-                    <h3>الفترة الإجبارية ${p + 1} (المدة: ${mandatoryMonths} شهر) - ${periodMonthsText} - إجمالي: ${cohortMales.length} ذكور، ${cohortFemales.length} إناث</h3>
-                    <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>الشهر</th>
-                                ${departmentsList.map(d => `<th>${d}</th>`).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>`;
+                    <h3>الفترة الإجبارية ${p + 1} (${mandatoryMonths} شهر) - ${pMonthsText}</h3>`;
 
-        // جدول الأقسام للفترة
-        for (let m = 1; m <= mandatoryMonths; m++) {
-            let currentMonthName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
-            html += `<tr><td><strong>الشهر ${m} (${currentMonthName})</strong></td>`;
+        let monthlySchedules = []; // لحفظ تسكين الطلاب شهرياً لاستخدامه في الكهربائي و Allocator
+
+        periodGroups.forEach(group => {
+            html += `<h4>توزيع الأقسام: ${group.name}</h4><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th>${departmentsList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
             
-            let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, cohortMales.length, cohortFemales.length);
-            let monthMaleCaps = adjustedCaps.males;
-            let monthFemaleCaps = adjustedCaps.females;
-
-            let maleAssignmentResult;
-            for(let attempt=0; attempt<50; attempt++) {
-                maleAssignmentResult = assignStudentsToDepartmentsSmart(cohortMales, monthMaleCaps, history);
-                if(maleAssignmentResult.success) break;
-            }
-            
-            let femaleAssignmentResult;
-            for(let attempt=0; attempt<50; attempt++) {
-                femaleAssignmentResult = assignStudentsToDepartmentsSmart(cohortFemales, monthFemaleCaps, maleAssignmentResult.success ? maleAssignmentResult.history : history);
-                if(femaleAssignmentResult.success) break;
-            }
-
-            if (maleAssignmentResult.success && femaleAssignmentResult.success) {
-                history = femaleAssignmentResult.history; 
-            }
-
-            departmentsList.forEach(dept => {
-                let cellStudents = [];
-                if(maleAssignmentResult.success) cellStudents.push(...maleAssignmentResult.assignments[dept]);
-                if(femaleAssignmentResult.success) cellStudents.push(...femaleAssignmentResult.assignments[dept]);
-
-                if (cellStudents.length > 0) {
-                    html += `<td><ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol></td>`;
-                } else {
-                    html += `<td>-</td>`;
-                }
-            });
-            html += `</tr>`;
-        }
-        html += `</tbody></table></div>`;
-
-        // إدراج جدول العلاج الكهربائي الخاص بهذه الفترة فقط (تحت جدول الأقسام مباشرة)
-        if (electroMaleReq > 0 || electroFemaleReq > 0) {
-            html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>
-                     <div class="table-responsive">
-                     <table class="data-table">
-                         <thead>
-                             <tr>
-                                 <th>الشهر</th>
-                                 <th>الأسبوع الأول</th>
-                                 <th>الأسبوع الثاني</th>
-                                 <th>الأسبوع الثالث</th>
-                                 <th>الأسبوع الرابع</th>
-                             </tr>
-                         </thead>
-                         <tbody>`;
-            
-            let poolMales = [...cohortMales];
-            let poolFemales = [...cohortFemales];
+            let history = {};
+            group.m.concat(group.f).forEach(s => history[s] = []);
+            let groupSchedules = [];
 
             for (let m = 1; m <= mandatoryMonths; m++) {
-                let currentMonthName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
-                html += `<tr><td><strong>الشهر ${m} (${currentMonthName})</strong></td>`;
+                let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
+                html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                 
-                for (let w = 1; w <= 4; w++) {
-                    let weekList = [];
-                    
-                    let availM = shuffle(poolMales.filter(s => !globalUsedElectroMales.includes(s)));
-                    let pickedM = availM.slice(0, electroMaleReq);
-                    globalUsedElectroMales.push(...pickedM);
-                    weekList.push(...pickedM);
+                let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, group.m.length, group.f.length);
+                let maleAssignment, femaleAssignment;
+                
+                for(let attempt=0; attempt<50; attempt++) { maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history); if(maleAssignment.success) break; }
+                for(let attempt=0; attempt<50; attempt++) { femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.success ? maleAssignment.history : history); if(femaleAssignment.success) break; }
+                if (maleAssignment.success && femaleAssignment.success) history = femaleAssignment.history;
 
-                    let availF = shuffle(poolFemales.filter(s => !globalUsedElectroFemales.includes(s)));
-                    let pickedF = availF.slice(0, electroFemaleReq);
-                    globalUsedElectroFemales.push(...pickedF);
-                    weekList.push(...pickedF);
-
-                    if (weekList.length > 0) {
-                        html += `<td><ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol></td>`;
-                    } else {
-                        html += `<td>-</td>`;
-                    }
-                }
+                let monthAssignments = {}; // طالب -> قسم
+                departmentsList.forEach(dept => {
+                    let cellStudents = [];
+                    if(maleAssignment.success) { cellStudents.push(...maleAssignment.assignments[dept]); maleAssignment.assignments[dept].forEach(s => monthAssignments[s] = dept); }
+                    if(femaleAssignment.success) { cellStudents.push(...femaleAssignment.assignments[dept]); femaleAssignment.assignments[dept].forEach(s => monthAssignments[s] = dept); }
+                    html += `<td>${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                });
+                groupSchedules.push(monthAssignments);
                 html += `</tr>`;
             }
+            monthlySchedules.push({ groupName: group.name, schedules: groupSchedules, m: group.m, f: group.f });
             html += `</tbody></table></div>`;
+        });
+
+        // ----------------- العلاج الكهربائي -----------------
+        if (electroMaleReq > 0 || electroFemaleReq > 0) {
+            html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
+            
+            monthlySchedules.forEach(groupInfo => {
+                html += `<h5>${groupInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعة</th></tr></thead><tbody>`;
+                
+                for (let m = 1; m <= mandatoryMonths; m++) {
+                    let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
+                    html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
+                    let monthAssig = groupInfo.schedules[m-1];
+                    let currentCycleElectro = []; // لحفظ الأسماء لتجنب التعارض مع Allocator
+
+                    for (let w = 1; w <= 4; w++) {
+                        let pickedM = pickElectroStudents(groupInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCaps);
+                        let pickedF = pickElectroStudents(groupInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCaps);
+                        
+                        if (!pickedM && electroMaleReq > 0) { alert(`استحالة إكمال عدد الذكور بالكهربائي (الفترة ${p+1}, شهر ${m}, دورة ${w}). راجع القيود!`); return; }
+                        if (!pickedF && electroFemaleReq > 0) { alert(`استحالة إكمال عدد الإناث بالكهربائي (الفترة ${p+1}, شهر ${m}, دورة ${w}). راجع القيود!`); return; }
+                        
+                        let weekList = [];
+                        if (pickedM) { globalUsedElectroMales.push(...pickedM); weekList.push(...pickedM); }
+                        if (pickedF) { globalUsedElectroFemales.push(...pickedF); weekList.push(...pickedF); }
+                        
+                        html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                        currentCycleElectro.push(weekList); // سيتم ربطها لاحقاً لو طلبنا دمج مع Allocator
+                    }
+                    html += `</tr>`;
+                }
+                html += `</tbody></table></div>`;
+            });
         }
-        
-        html += `</div>`; // إغلاق الـ result-section الخاص بالفترة
+
+        // ----------------- جدول الـ Allocator -----------------
+        if (isAllocator && allocStart) {
+            html += `<h4 style="margin-top:20px; color:#16a34a;">توزيع مسؤولي التاريخ المرضي Allocator (الفترة ${p + 1})</h4>`;
+            
+            let allocatorCurrentDate = new Date(allocStart);
+            allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths)); // بداية منطقية للفترة
+
+            monthlySchedules.forEach(groupInfo => {
+                html += `<h5>${groupInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
+                
+                let usedAllocators = [];
+                let daysAssigned = 0;
+                let maxDays = mandatoryMonths * 30; // تقريبي
+                let safety = 0;
+
+                while (daysAssigned < maxDays && safety < 100) {
+                    safety++;
+                    let dateString = allocatorCurrentDate.toISOString().split('T')[0];
+                    let isWeekend = allocWeekends.includes(allocatorCurrentDate.getDay());
+                    let holiday = window.publicHolidays.find(h => h.date === dateString);
+                    
+                    if (isWeekend || holiday) {
+                        html += `<tr style="background:#f1f5f9;"><td>${dateString}</td><td colspan="2">${holiday ? 'إجازة رسمية: ' + holiday.name : 'عطلة أسبوعية'}</td></tr>`;
+                        allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
+                        continue;
+                    }
+
+                    // اختيار الطلاب
+                    let monthIdx = Math.floor(daysAssigned / 30) % mandatoryMonths;
+                    let monthAssig = groupInfo.schedules[monthIdx];
+                    
+                    // استبعاد الحكيم ومسؤولي الكهربائي ومن تم استخدامهم مسبقاً في الـ Allocator
+                    let availM = shuffle(groupInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroMales.includes(s)));
+                    let availF = shuffle(groupInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroFemales.includes(s)));
+                    
+                    let pickedM = availM.slice(0, allocMaleReq);
+                    let pickedF = availF.slice(0, allocFemaleReq);
+                    let picked = [...pickedM, ...pickedF];
+                    
+                    if (picked.length < (allocMaleReq + allocFemaleReq)) {
+                        if (confirm(`عجز في عدد طلاب الـ Allocator (${dateString}). هل تريد الإكمال وترك الأيام المتبقية فارغة؟`)) { break; } else { return; }
+                    }
+
+                    usedAllocators.push(...picked);
+                    
+                    // تحديد فترة الدورة (تواريخ)
+                    let endDate = new Date(allocatorCurrentDate);
+                    endDate.setDate(endDate.getDate() + allocCycle - 1);
+                    html += `<tr><td>من ${dateString} <br>إلى ${endDate.toISOString().split('T')[0]}</td><td><ol class="student-list"><li>${picked.join('</li><li>')}</li></ol></td><td>دورة ${allocCycle} أيام</td></tr>`;
+                    
+                    allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                    daysAssigned += allocCycle;
+                }
+                
+                // حساب الفائض
+                let unassigned = [...groupInfo.m, ...groupInfo.f].filter(s => !usedAllocators.includes(s) && groupInfo.schedules[0][s] !== 'قسم (الحكيم)');
+                if (unassigned.length > 0) {
+                    html += `<tr style="background:#fef2f2;"><td colspan="3"><strong>فائض لم يوزع (${unassigned.length}):</strong> ${unassigned.join(' ، ')}</td></tr>`;
+                }
+
+                html += `</tbody></table></div>`;
+            });
+        }
+        html += `</div>`;
     }
 
     document.getElementById('resultsContainer').innerHTML = html;
     document.getElementById('printActions').style.display = 'flex';
     document.getElementById('printArea').scrollIntoView({ behavior: 'smooth' });
 }
+
+// ======================= دوال الطباعة والتصدير ======================= //
 
 // دالة تصدير النتيجة كملف Word بتنسيق Landscape مطابق للطباعة
 function exportToWord() {
