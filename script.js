@@ -431,7 +431,7 @@ async function generateDistribution() {
                 html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
                 
                 for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعة</th></tr></thead><tbody>`;
+                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
                     
                     for (let m = 1; m <= mandatoryMonths; m++) {
                         let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
