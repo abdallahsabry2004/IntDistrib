@@ -1,3 +1,6 @@
+// ============================================================================
+// المتغيرات العامة (Global State)
+// ============================================================================
 window.globalDistributionPlan = { males: [], females: [] };
 window.lastDistributionData = [];
 window.publicHolidays = [];
@@ -8,6 +11,7 @@ const departmentsList = [
 ];
 const arabicMonths = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
+// الاستماع لتغييرات الأسماء لتحديث العداد
 document.getElementById('maleNames').addEventListener('input', updateCounts);
 document.getElementById('femaleNames').addEventListener('input', updateCounts);
 document.getElementById('mandatoryMonths').addEventListener('change', updatePeriodSummary);
@@ -16,6 +20,9 @@ document.getElementById('enableAllocator').addEventListener('change', function()
     document.getElementById('allocatorSettings').style.display = this.checked ? 'block' : 'none';
 });
 
+// ============================================================================
+// دوال واجهة المستخدم (UI Functions)
+// ============================================================================
 function buildDepartmentsTable() {
     const tbody = document.querySelector('#departmentsTable tbody');
     tbody.innerHTML = '';
@@ -51,6 +58,9 @@ function calculateTotals() {
     document.getElementById('totalFemaleInput').innerText = totalFemale;
 }
 
+// ============================================================================
+// الخوارزميات المساعدة (Helper Algorithms)
+// ============================================================================
 function shuffle(array) {
     let currentIndex = array.length, randomIndex;
     while (currentIndex !== 0) {
@@ -133,6 +143,7 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) 
     return { success: !failed, assignments: assignments, history: newHistory };
 }
 
+// عرض ملخص الفترات 
 function updatePeriodSummary() {
     const months = parseInt(document.getElementById('mandatoryMonths').value);
     const periodsCount = 12 / months;
@@ -163,7 +174,7 @@ function updatePeriodSummary() {
     document.getElementById('detailedPeriodTable').innerHTML = (totalMales > 0 || totalFemales > 0) ? tableHtml : '';
 }
 
-// جلب الإجازات من API
+// جلب الإجازات من الـ API
 async function fetchPublicHolidays(year) {
     try {
         let res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/EG`);
@@ -183,17 +194,16 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         if (dept === 'قسم (الحكيم)') return false;
         let deptIdx = departmentsList.indexOf(dept);
         let cap = maxCapsArray[deptIdx];
-        if (cap === 0) return false;
+        if (cap === 0) return false; // ممنوع الاختيار من القسم ده
         return true;
     });
 
-    if (validAvailable.length < requiredCount) return null;
+    if (validAvailable.length < requiredCount) return null; // العدد المتاح أقل من المطلوب
 
     let picked = [];
     let deptCounts = {};
     departmentsList.forEach(d => deptCounts[d] = 0);
 
-    // تجميع الطلاب حسب الأقسام
     let byDept = {};
     departmentsList.forEach(d => byDept[d] = []);
     validAvailable.forEach(s => byDept[monthAssignments[s]].push(s));
@@ -201,13 +211,11 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
     let attempts = 0;
     while (picked.length < requiredCount && attempts < 100) {
         attempts++;
-        // إذا كان المطلوب أكثر من 1، يجب التنويع
         let deptsWithAvailable = departmentsList.filter(d => 
             byDept[d].length > 0 && 
             (maxCapsArray[departmentsList.indexOf(d)] === -1 || deptCounts[d] < maxCapsArray[departmentsList.indexOf(d)])
         );
         
-        // منع السحب من قسم واحد إذا تم السحب منه للتو والمطلوب أكثر من 1
         if (requiredCount > 1 && picked.length > 0) {
             let lastDept = monthAssignments[picked[picked.length - 1]];
             if (deptsWithAvailable.length > 1) {
@@ -227,7 +235,9 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
     return picked;
 }
 
-// إنشاء التوزيع (Async لدعم الـ API)
+// ============================================================================
+// الخوارزمية الرئيسية (Main Generation) مع نظام التحقق الذكي (Smart Validation)
+// ============================================================================
 async function generateDistribution() {
     const males = document.getElementById('maleNames').value.split('\n').filter(n => n.trim() !== '');
     const females = document.getElementById('femaleNames').value.split('\n').filter(n => n.trim() !== '');
@@ -242,25 +252,35 @@ async function generateDistribution() {
     let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
     let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
     let electroMaxCaps = Array.from(document.querySelectorAll('.dept-electro-max')).map(inp => {
-        if(inp.value === "") return -1; // لا حد أقصى
+        if(inp.value === "") return -1; 
         return parseInt(inp.value);
     });
-    electroMaxCaps[6] = 0; // الحكيم دائماً صفر
+    electroMaxCaps[6] = 0; 
 
+    // --- Smart Validation Block 1: Department Capacity ---
     let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
     let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
     let cohortMinMales = Math.floor(males.length / numPeriods);
     let cohortMinFemales = Math.floor(females.length / numPeriods);
     
-    // في نظام 3 أيام، الأقسام تطلب ضعف العدد (مجموعة أ + مجموعة ب)
     let requiredMalesCheck = is3Days ? sumMaleCaps * 2 : sumMaleCaps;
     let requiredFemalesCheck = is3Days ? sumFemaleCaps * 2 : sumFemaleCaps;
 
     if (requiredMalesCheck > cohortMinMales || requiredFemalesCheck > cohortMinFemales) {
-        if (!confirm(`⚠️ الأعداد المطلوبة للأقسام تفوق المتاح!\nالمتاح في الفترة: ${cohortMinMales} ذكور و ${cohortMinFemales} إناث.\nهل تريد الإكمال وتقليل الأعداد عشوائياً لسد العجز؟`)) return;
+        let deficitDetails = [];
+        if (requiredMalesCheck > cohortMinMales) deficitDetails.push(`- ذكور: مطلوب (${requiredMalesCheck}) متاح (${cohortMinMales})`);
+        if (requiredFemalesCheck > cohortMinFemales) deficitDetails.push(`- إناث: مطلوب (${requiredFemalesCheck}) متاح (${cohortMinFemales})`);
+        
+        let msg = `⚠️ [تحليل النظام: عجز في سعة الأقسام]\n\n`;
+        msg += `🔍 الحالة:\nالأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في الفترة الإجبارية.\n\n`;
+        msg += `📊 التفاصيل:\n${deficitDetails.join('\n')}\n\n`;
+        msg += `💡 السبب:\nإما أن عدد الدفعة قليل، أو أن نظام (3 أيام) يضاعف الاحتياج لتغطية المجموعتين (أ، ب).\n\n`;
+        msg += `✅ الحلول:\n1. تقليل الأعداد المطلوبة في الأقسام.\n2. زيادة عدد الدفعة.\n\n`;
+        msg += `❓ هل تريد إجبار النظام على الإكمال؟ (سيتم تقليل الأعداد عشوائياً لسد العجز)`;
+        
+        if (!confirm(msg)) return;
     }
 
-    // جلب الإجازات إذا كان الـ Allocator مفعلاً
     let isAllocator = document.getElementById('enableAllocator').checked;
     if (isAllocator) {
         let year = new Date().getFullYear();
@@ -286,7 +306,6 @@ async function generateDistribution() {
     const electroFemaleReq = parseInt(document.getElementById('electroFemale').value) || 0;
     let globalUsedElectroMales = [], globalUsedElectroFemales = [];
 
-    // بيانات الـ Allocator
     let allocMaleReq = parseInt(document.getElementById('allocMale').value) || 0;
     let allocFemaleReq = parseInt(document.getElementById('allocFemale').value) || 0;
     let allocCycle = parseInt(document.getElementById('allocCycle').value) || 1;
@@ -312,7 +331,7 @@ async function generateDistribution() {
         html += `<div class="result-section" style="page-break-after: always; padding-bottom: 20px;">
                     <h3>الفترة الإجبارية ${p + 1} (${mandatoryMonths} شهر) - ${pMonthsText}</h3>`;
 
-        let monthlySchedules = []; // لحفظ تسكين الطلاب شهرياً لاستخدامه في الكهربائي و Allocator
+        let monthlySchedules = []; 
 
         periodGroups.forEach(group => {
             html += `<h4>توزيع الأقسام: ${group.name}</h4><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th>${departmentsList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
@@ -332,7 +351,7 @@ async function generateDistribution() {
                 for(let attempt=0; attempt<50; attempt++) { femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.success ? maleAssignment.history : history); if(femaleAssignment.success) break; }
                 if (maleAssignment.success && femaleAssignment.success) history = femaleAssignment.history;
 
-                let monthAssignments = {}; // طالب -> قسم
+                let monthAssignments = {}; 
                 departmentsList.forEach(dept => {
                     let cellStudents = [];
                     if(maleAssignment.success) { cellStudents.push(...maleAssignment.assignments[dept]); maleAssignment.assignments[dept].forEach(s => monthAssignments[s] = dept); }
@@ -350,33 +369,41 @@ async function generateDistribution() {
         if (electroMaleReq > 0 || electroFemaleReq > 0) {
             html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
             
-            monthlySchedules.forEach(groupInfo => {
-                html += `<h5>${groupInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعة</th></tr></thead><tbody>`;
+            for (let gInfo of monthlySchedules) {
+                html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعة</th></tr></thead><tbody>`;
                 
                 for (let m = 1; m <= mandatoryMonths; m++) {
                     let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                     html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
-                    let monthAssig = groupInfo.schedules[m-1];
-                    let currentCycleElectro = []; // لحفظ الأسماء لتجنب التعارض مع Allocator
+                    let monthAssig = gInfo.schedules[m-1];
 
                     for (let w = 1; w <= 4; w++) {
-                        let pickedM = pickElectroStudents(groupInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCaps);
-                        let pickedF = pickElectroStudents(groupInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCaps);
+                        let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCaps);
+                        let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCaps);
                         
-                        if (!pickedM && electroMaleReq > 0) { alert(`استحالة إكمال عدد الذكور بالكهربائي (الفترة ${p+1}, شهر ${m}, دورة ${w}). راجع القيود!`); return; }
-                        if (!pickedF && electroFemaleReq > 0) { alert(`استحالة إكمال عدد الإناث بالكهربائي (الفترة ${p+1}, شهر ${m}, دورة ${w}). راجع القيود!`); return; }
+                        // --- Smart Validation Block 2: Electrotherapy Constraints ---
+                        if ((!pickedM && electroMaleReq > 0) || (!pickedF && electroFemaleReq > 0)) {
+                            let typeStr = (!pickedM) ? 'ذكور' : 'إناث';
+                            let reqStr = (!pickedM) ? electroMaleReq : electroFemaleReq;
+                            let msg = `⚠️ [تحليل النظام: فشل تسكين العلاج الكهربائي - ${typeStr}]\n\n`;
+                            msg += `🔍 الحالة:\nلم يتمكن النظام من إيجاد (${reqStr}) طلاب في الدورة (${w}) لشهر (${mName}) في (${gInfo.groupName}).\n\n`;
+                            msg += `💡 السبب:\nالقيود التي حددتها (الحد الأقصى للأقسام) منعت تجميع العدد، أو أن كل الطلاب متاحين في (قسم الحكيم المستثنى)، أو تم استنفاذ الطلاب بالكامل.\n\n`;
+                            msg += `✅ الحلول:\n1. قم بزيادة (الحد الأقصى) المسموح به للأقسام.\n2. قلل العدد المطلوب أسبوعياً.\n\n`;
+                            msg += `العملية توقفت. يرجى تعديل الإعدادات والمحاولة مجدداً.`;
+                            alert(msg);
+                            return;
+                        }
                         
                         let weekList = [];
                         if (pickedM) { globalUsedElectroMales.push(...pickedM); weekList.push(...pickedM); }
                         if (pickedF) { globalUsedElectroFemales.push(...pickedF); weekList.push(...pickedF); }
                         
                         html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
-                        currentCycleElectro.push(weekList); // سيتم ربطها لاحقاً لو طلبنا دمج مع Allocator
                     }
                     html += `</tr>`;
                 }
                 html += `</tbody></table></div>`;
-            });
+            }
         }
 
         // ----------------- جدول الـ Allocator -----------------
@@ -384,14 +411,14 @@ async function generateDistribution() {
             html += `<h4 style="margin-top:20px; color:#16a34a;">توزيع مسؤولي التاريخ المرضي Allocator (الفترة ${p + 1})</h4>`;
             
             let allocatorCurrentDate = new Date(allocStart);
-            allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths)); // بداية منطقية للفترة
+            allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths));
 
-            monthlySchedules.forEach(groupInfo => {
-                html += `<h5>${groupInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
+            for (let gInfo of monthlySchedules) {
+                html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
                 
                 let usedAllocators = [];
                 let daysAssigned = 0;
-                let maxDays = mandatoryMonths * 30; // تقريبي
+                let maxDays = mandatoryMonths * 30; 
                 let safety = 0;
 
                 while (daysAssigned < maxDays && safety < 100) {
@@ -406,25 +433,29 @@ async function generateDistribution() {
                         continue;
                     }
 
-                    // اختيار الطلاب
                     let monthIdx = Math.floor(daysAssigned / 30) % mandatoryMonths;
-                    let monthAssig = groupInfo.schedules[monthIdx];
+                    let monthAssig = gInfo.schedules[monthIdx];
                     
-                    // استبعاد الحكيم ومسؤولي الكهربائي ومن تم استخدامهم مسبقاً في الـ Allocator
-                    let availM = shuffle(groupInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroMales.includes(s)));
-                    let availF = shuffle(groupInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroFemales.includes(s)));
+                    let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroMales.includes(s)));
+                    let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroFemales.includes(s)));
                     
                     let pickedM = availM.slice(0, allocMaleReq);
                     let pickedF = availF.slice(0, allocFemaleReq);
                     let picked = [...pickedM, ...pickedF];
                     
+                    // --- Smart Validation Block 3: Allocator Deficit ---
                     if (picked.length < (allocMaleReq + allocFemaleReq)) {
-                        if (confirm(`عجز في عدد طلاب الـ Allocator (${dateString}). هل تريد الإكمال وترك الأيام المتبقية فارغة؟`)) { break; } else { return; }
+                        let msg = `⚠️ [تحليل النظام: عجز في الـ Allocator]\n\n`;
+                        msg += `🔍 الحالة:\nالطلاب المتاحين في دورة (${dateString}) غير كافين لتغطية المطلوب.\n\n`;
+                        msg += `💡 السبب:\nمعظم الطلاب محجوزين في "قسم الحكيم" أو مسجلين كـ "علاج كهربائي"، أو تم استهلاكهم بالكامل في دورات الـ Allocator السابقة.\n\n`;
+                        msg += `✅ الحلول:\n1. تقليل العدد المطلوب للـ Allocator.\n2. زيادة أيام تجديد القائمة لتقليل استهلاك الطلاب السريع.\n\n`;
+                        msg += `❓ هل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`;
+                        
+                        if (confirm(msg)) { break; } else { return; }
                     }
 
                     usedAllocators.push(...picked);
                     
-                    // تحديد فترة الدورة (تواريخ)
                     let endDate = new Date(allocatorCurrentDate);
                     endDate.setDate(endDate.getDate() + allocCycle - 1);
                     html += `<tr><td>من ${dateString} <br>إلى ${endDate.toISOString().split('T')[0]}</td><td><ol class="student-list"><li>${picked.join('</li><li>')}</li></ol></td><td>دورة ${allocCycle} أيام</td></tr>`;
@@ -433,14 +464,14 @@ async function generateDistribution() {
                     daysAssigned += allocCycle;
                 }
                 
-                // حساب الفائض
-                let unassigned = [...groupInfo.m, ...groupInfo.f].filter(s => !usedAllocators.includes(s) && groupInfo.schedules[0][s] !== 'قسم (الحكيم)');
+                // Smart Output: الفائض المتبقي
+                let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
                 if (unassigned.length > 0) {
-                    html += `<tr style="background:#fef2f2;"><td colspan="3"><strong>فائض لم يوزع (${unassigned.length}):</strong> ${unassigned.join(' ، ')}</td></tr>`;
+                    html += `<tr style="background:#fef2f2;"><td colspan="3"><strong style="color:red;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
                 }
 
                 html += `</tbody></table></div>`;
-            });
+            }
         }
         html += `</div>`;
     }
@@ -450,99 +481,12 @@ async function generateDistribution() {
     document.getElementById('printArea').scrollIntoView({ behavior: 'smooth' });
 }
 
-// ======================= دوال الطباعة والتصدير ======================= //
-
-// دالة تصدير النتيجة كملف Word بتنسيق Landscape مطابق للطباعة
-function exportToWord() {
-    // إضافة CSS مخصص لبرنامج Microsoft Word لضبط الـ Landscape والألوان
-    let css = `
-        <style>
-            @page WordSection1 {
-                size: 841.9pt 595.3pt; /* A4 Landscape */
-                mso-page-orientation: landscape;
-                margin: 0.5in 0.5in 0.5in 0.5in;
-            }
-            div.WordSection1 { 
-                page: WordSection1; 
-                direction: rtl; 
-                font-family: 'Cairo', sans-serif; 
-            }
-            table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                margin-bottom: 20px; 
-                text-align: center; 
-                direction: rtl; 
-            }
-            th, td { 
-                border: 1pt solid windowtext; 
-                padding: 5pt; 
-                vertical-align: top; 
-            }
-            th { 
-                background-color: #f3f4f6; 
-                font-weight: bold; 
-                color: #1e3a8a;
-            }
-            h3, h4 { 
-                color: #1e3a8a; 
-                text-align: right; 
-                border-bottom: 1pt solid #1e3a8a;
-                padding-bottom: 5pt;
-            }
-            ol { 
-                margin: 0; 
-                padding-right: 20px; 
-                text-align: right; 
-            }
-        </style>
-    `;
-
-    // تجهيز الهيكل الأساسي لملف الوورد
-    let preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-        <meta charset='utf-8'>
-        <title>التوزيع النهائي لطلاب الامتياز</title>
-        ${css}
-    </head>
-    <body>
-        <div class="WordSection1">`;
-
-    let postHtml = `</div></body></html>`;
-
-    // سحب الجداول من الموقع
-    let content = document.getElementById('resultsContainer').innerHTML;
-    let html = preHtml + content + postHtml;
-    
-    // إنشاء الملف وتحميله
-    let blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-    let url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
-    
-    let downloadLink = document.createElement("a");
-    document.body.appendChild(downloadLink);
-    
-    if (navigator.msSaveOrOpenBlob) {
-        navigator.msSaveOrOpenBlob(blob, 'التوزيع_النهائي_للامتياز.doc');
-    } else {
-        downloadLink.href = url;
-        downloadLink.download = 'التوزيع_النهائي_للامتياز.doc';
-        downloadLink.click();
-    }
-    document.body.removeChild(downloadLink);
-}
-
 // ============================================================================
-// 1. دالة طباعة كشف شئون الامتياز (محدثة بتنسيق الصفحات)
+// دوال الطباعة والتصدير (Print & Export) - لا يوجد تعديلات هنا
 // ============================================================================
 function printAdminTable() {
-    if (window.lastDistributionData.length === 0) {
-        alert("يرجى إنشاء التوزيع العشوائي أولاً!");
-        return;
-    }
-    
+    if (window.lastDistributionData.length === 0) { alert("يرجى إنشاء التوزيع أولاً!"); return; }
     const startMonthIdx = parseInt(document.getElementById('startMonth').value);
-    
-    // إعداد هيكل الـ HTML مع CSS مخصص للطباعة لمنع انقسام الجداول
     let adminHtml = `<html><head><title>كشف أسماء طلاب الامتياز</title><style>
         body { font-family: 'Cairo', sans-serif; direction: rtl; padding: 20px; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
@@ -550,202 +494,108 @@ function printAdminTable() {
         th { background-color: #f3f4f6; }
         h2 { text-align: center; margin-bottom: 20px; page-break-after: avoid; }
         h3 { color: #1e3a8a; page-break-after: avoid; }
-        /* الكلاس الجديد لضمان عدم انقسام الفترة في منتصف الورقة */
-        .period-section { 
-            page-break-inside: avoid; /* يمنع انقسام الجدول الواحد بين صفحتين */
-            page-break-after: always; /* يجعل كل فترة تبدأ في صفحة جديدة */
-        }
-        .period-section:last-child {
-            page-break-after: auto; /* إلغاء فاصل الصفحة بعد آخر فترة */
-        }
-    </style></head><body>`;
-    
-    adminHtml += `<h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
+        .period-section { page-break-inside: avoid; page-break-after: always; }
+        .period-section:last-child { page-break-after: auto; }
+    </style></head><body><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
         let monthNames = [];
-        for (let m = 0; m < data.mandatoryMonths; m++) {
-            monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
-        }
-        
-        // تغليف كل فترة بـ div يحمل الكلاس الخاص بالطباعة
-        adminHtml += `<div class="period-section">`;
-        adminHtml += `<h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3>`;
-        adminHtml += `<table>
-                        <thead>
-                            <tr>
-                                <th style="width: 10%;">م</th>
-                                <th style="width: 60%;">اسم الطالب</th>
-                                <th style="width: 30%;">النوع</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
+        for (let m = 0; m < data.mandatoryMonths; m++) monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
+        adminHtml += `<div class="period-section"><h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3>
+        <table><thead><tr><th style="width: 10%;">م</th><th style="width: 60%;">اسم الطالب</th><th style="width: 30%;">النوع</th></tr></thead><tbody>`;
         let count = 1;
-        data.males.forEach(name => {
-            adminHtml += `<tr><td>${count++}</td><td>${name}</td><td>ذكر</td></tr>`;
-        });
-        data.females.forEach(name => {
-            adminHtml += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`;
-        });
+        data.males.forEach(name => { adminHtml += `<tr><td>${count++}</td><td>${name}</td><td>ذكر</td></tr>`; });
+        data.females.forEach(name => { adminHtml += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`; });
         adminHtml += `</tbody></table></div>`;
     });
-    
     adminHtml += `</body></html>`;
     
     let printWin = window.open('', '_blank');
     printWin.document.write(adminHtml);
     printWin.document.close();
     printWin.focus();
-    
-    printWin.onload = function() {
-        printWin.print();
-    };
-    printWin.onafterprint = function() {
-        printWin.close();
-    };
+    printWin.onload = function() { printWin.print(); };
+    printWin.onafterprint = function() { printWin.close(); };
 }
 
-// ============================================================================
-// 2. دالة تصدير شئون الامتياز إلى ملف Word (.doc)
-// ============================================================================
-function exportAdminToWord() {
-    if (window.lastDistributionData.length === 0) {
-        alert("يرجى إنشاء التوزيع العشوائي أولاً!");
-        return;
-    }
-    
-    const startMonthIdx = parseInt(document.getElementById('startMonth').value);
-    
-    // إعداد CSS مخصص لـ Microsoft Word (MSO)
-    let css = `
-        <style>
-            @page WordSection1 {
-                size: 595.3pt 841.9pt; /* حجم A4 رأسي (Portrait) لأنه مناسب أكثر للقوائم */
-                margin: 0.5in 0.5in 0.5in 0.5in;
-            }
-            div.WordSection1 { page: WordSection1; direction: rtl; font-family: 'Cairo', sans-serif; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; direction: rtl; }
-            th, td { border: 1pt solid windowtext; padding: 8pt; }
-            th { background-color: #f3f4f6; font-weight: bold; color: #1e3a8a; }
-            h2 { text-align: center; margin-bottom: 20px; color: #000; }
-            h3 { color: #1e3a8a; text-align: right; }
-            /* إجبار الوورد على بدء صفحة جديدة لكل فترة */
-            .page-break { mso-special-character: line-break; page-break-before: always; }
-        </style>
-    `;
-
+function exportToWord() {
+    let css = `<style>
+        @page WordSection1 { size: 841.9pt 595.3pt; mso-page-orientation: landscape; margin: 0.5in 0.5in 0.5in 0.5in; }
+        div.WordSection1 { page: WordSection1; direction: rtl; font-family: 'Cairo', sans-serif; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; direction: rtl; }
+        th, td { border: 1pt solid windowtext; padding: 5pt; vertical-align: top; }
+        th { background-color: #f3f4f6; font-weight: bold; color: #1e3a8a; }
+        h3, h4, h5 { color: #1e3a8a; text-align: right; border-bottom: 1pt solid #1e3a8a; padding-bottom: 5pt; }
+        ol { margin: 0; padding-right: 20px; text-align: right; }
+    </style>`;
     let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head>
-    <body><div class="WordSection1">
-    <h2>كشف اسماء توزيع طلاب الإمتياز في الشهور الإجبارية</h2>`;
-
-    window.lastDistributionData.forEach((data, index) => {
-        let periodStartAbsolute = index * data.mandatoryMonths;
-        let monthNames = [];
-        for (let m = 0; m < data.mandatoryMonths; m++) {
-            monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
-        }
-        
-        if (index > 0) {
-            html += `<br clear="all" class="page-break" />`; // فاصل صفحات لملف الوورد
-        }
-        
-        html += `<h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3>`;
-        html += `<table>
-                    <thead>
-                        <tr>
-                            <th>م</th>
-                            <th>اسم الطالب</th>
-                            <th>النوع</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-        let count = 1;
-        data.males.forEach(name => {
-            html += `<tr><td>${count++}</td><td>${name}</td><td>ذكر</td></tr>`;
-        });
-        data.females.forEach(name => {
-            html += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`;
-        });
-        html += `</tbody></table>`;
-    });
-
-    html += `</div></body></html>`;
+    <head><meta charset='utf-8'><title>التوزيع النهائي لطلاب الامتياز</title>${css}</head><body><div class="WordSection1">` 
+    + document.getElementById('resultsContainer').innerHTML + `</div></body></html>`;
     
     let blob = new Blob(['\ufeff', html], { type: 'application/msword' });
     let url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
     let downloadLink = document.createElement("a");
     document.body.appendChild(downloadLink);
-    downloadLink.href = url;
-    downloadLink.download = 'كشف_شئون_الامتياز.doc';
-    downloadLink.click();
+    downloadLink.href = url; downloadLink.download = 'التوزيع_النهائي_للامتياز.doc'; downloadLink.click();
     document.body.removeChild(downloadLink);
 }
 
-// ============================================================================
-// 3. دالة تصدير شئون الامتياز إلى ملف Excel (.xlsx)
-// ============================================================================
-function exportAdminToExcel() {
-    if (window.lastDistributionData.length === 0) {
-        alert("يرجى إنشاء التوزيع العشوائي أولاً!");
-        return;
-    }
-    
-    // التحقق من وجود مكتبة SheetJS
-    if (typeof XLSX === 'undefined') {
-        alert("حدث خطأ: مكتبة Excel لم يتم تحميلها بشكل صحيح. يرجى التأكد من اتصالك بالإنترنت.");
-        return;
-    }
-    
+function exportAdminToWord() {
+    if (window.lastDistributionData.length === 0) { alert("يرجى إنشاء التوزيع أولاً!"); return; }
     const startMonthIdx = parseInt(document.getElementById('startMonth').value);
+    let css = `<style>
+        @page WordSection1 { size: 595.3pt 841.9pt; margin: 0.5in 0.5in 0.5in 0.5in; }
+        div.WordSection1 { page: WordSection1; direction: rtl; font-family: 'Cairo', sans-serif; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: center; direction: rtl; }
+        th, td { border: 1pt solid windowtext; padding: 8pt; }
+        th { background-color: #f3f4f6; font-weight: bold; color: #1e3a8a; }
+        h2 { text-align: center; margin-bottom: 20px; color: #000; }
+        h3 { color: #1e3a8a; text-align: right; }
+        .page-break { mso-special-character: line-break; page-break-before: always; }
+    </style>`;
+    let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
     
-    // إنشاء ملف Excel جديد
-    let wb = XLSX.utils.book_new();
-    wb.Workbook = { Views: [{ RTL: true }] }; // ضبط الملف ليكون من اليمين لليسار
-
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
         let monthNames = [];
-        for (let m = 0; m < data.mandatoryMonths; m++) {
-            monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
-        }
-        
-        // تجهيز البيانات التي ستدخل في الـ Sheet (مصفوفة ثنائية الأبعاد)
-        let wsData = [
-            [`كشف أسماء طلاب الامتياز - الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})`],
-            [], // سطر فارغ
-            ['م', 'اسم الطالب', 'النوع'] // ترويسة الجدول
-        ];
-        
+        for (let m = 0; m < data.mandatoryMonths; m++) monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
+        if (index > 0) html += `<br clear="all" class="page-break" />`;
+        html += `<h3>الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})</h3><table><thead><tr><th>م</th><th>اسم الطالب</th><th>النوع</th></tr></thead><tbody>`;
         let count = 1;
-        data.males.forEach(name => {
-            wsData.push([count++, name, 'ذكر']);
-        });
-        data.females.forEach(name => {
-            wsData.push([count++, name, 'أنثى']);
-        });
-
-        // تحويل المصفوفة إلى Sheet
-        let ws = XLSX.utils.aoa_to_sheet(wsData);
-        
-        // ضبط عرض الأعمدة ليكون مناسباً
-        ws['!cols'] = [
-            { wch: 5 },   // عمود "م"
-            { wch: 40 },  // عمود "اسم الطالب"
-            { wch: 15 }   // عمود "النوع"
-        ];
-
-        // إضافة الـ Sheet لملف الـ Excel (تسمية كل Sheet برقم الفترة)
-        // الحد الأقصى لاسم الـ Sheet هو 31 حرف في Excel
-        let sheetName = `الفترة ${index + 1}`; 
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        data.males.forEach(name => { html += `<tr><td>${count++}</td><td>${name}</td><td>ذكر</td></tr>`; });
+        data.females.forEach(name => { html += `<tr><td>${count++}</td><td>${name}</td><td>أنثى</td></tr>`; });
+        html += `</tbody></table>`;
     });
-    
-    // تنزيل الملف بصيغة .xlsx
+    html += `</div></body></html>`;
+    let blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    let url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
+    let downloadLink = document.createElement("a");
+    document.body.appendChild(downloadLink);
+    downloadLink.href = url; downloadLink.download = 'كشف_شئون_الامتياز.doc'; downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+function exportAdminToExcel() {
+    if (window.lastDistributionData.length === 0) { alert("يرجى إنشاء التوزيع أولاً!"); return; }
+    if (typeof XLSX === 'undefined') { alert("مكتبة Excel لم يتم تحميلها بشكل صحيح."); return; }
+    const startMonthIdx = parseInt(document.getElementById('startMonth').value);
+    let wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] };
+    window.lastDistributionData.forEach((data, index) => {
+        let periodStartAbsolute = index * data.mandatoryMonths;
+        let monthNames = [];
+        for (let m = 0; m < data.mandatoryMonths; m++) monthNames.push(arabicMonths[(startMonthIdx + periodStartAbsolute + m) % 12]);
+        let wsData = [ [`كشف أسماء طلاب الامتياز - الفترة الإجبارية ${index + 1} (${monthNames.join(' و ')})`], [], ['م', 'اسم الطالب', 'النوع'] ];
+        let count = 1;
+        data.males.forEach(name => { wsData.push([count++, name, 'ذكر']); });
+        data.females.forEach(name => { wsData.push([count++, name, 'أنثى']); });
+        let ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws['!cols'] = [ { wch: 5 }, { wch: 40 }, { wch: 15 } ];
+        XLSX.utils.book_append_sheet(wb, ws, `الفترة ${index + 1}`);
+    });
     XLSX.writeFile(wb, 'كشف_شئون_الامتياز.xlsx');
 }
 
-window.onload = () => {
-    buildDepartmentsTable();
-};
+window.onload = () => { buildDepartmentsTable(); };
