@@ -637,7 +637,7 @@ function printAdminTable() {
         h3 { color: #1e3a8a; page-break-after: avoid; }
         .period-section { page-break-inside: avoid; page-break-after: always; }
         .period-section:last-child { page-break-after: auto; }
-    </style></head><body><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    </style></head><body><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
@@ -698,7 +698,7 @@ function exportAdminToWord() {
         .page-break { mso-special-character: line-break; page-break-before: always; }
     </style>`;
     let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
     
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
