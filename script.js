@@ -302,7 +302,6 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
 // ============================================================================
 async function generateDistribution() {
     try {
-        // 1. إعادة ضبط مصفوفة Electrotherapy مع كل دورة توزيع
         window.electroRegistry = []; 
         let globalUsedElectroMales = [], globalUsedElectroFemales = [];
         window.lastDistributionData = [];
@@ -372,6 +371,7 @@ async function generateDistribution() {
         let allocWeekends = (document.getElementById('allocWeekend')?.value || "5,6").split(',').map(Number);
         let allocStartDateVal = document.getElementById('allocStartDate')?.value;
         let allocStart = allocStartDateVal ? new Date(allocStartDateVal) : null;
+        let allocDistributeSurplus = document.getElementById('allocDistributeSurplus')?.checked || false;
 
         for (let p = 0; p < numPeriods; p++) {
             let cohortMales = malePeriods[p], cohortFemales = femalePeriods[p];
@@ -481,6 +481,10 @@ async function generateDistribution() {
                     let daysAssigned = 0;
                     let maxDays = mandatoryMonths * 30; 
                     let safety = 0;
+                    
+                    let allocCyclesData = [];
+                    let uncoveredDays = [];
+                    let deficitOccurred = false;
 
                     while (daysAssigned < maxDays && safety < 100) {
                         safety++;
@@ -489,8 +493,19 @@ async function generateDistribution() {
                         let holiday = window.publicHolidays.find(h => h.date === dateString);
                         
                         if (isWeekend || holiday) {
-                            html += `<tr style="background:#f1f5f9;"><td>${dateString}</td><td colspan="2">${holiday ? 'إجازة رسمية: ' + holiday.name : 'عطلة أسبوعية'}</td></tr>`;
+                            allocCyclesData.push({ isOff: true, date: dateString, reason: holiday ? 'إجازة رسمية: ' + holiday.name : 'عطلة أسبوعية' });
                             allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
+                            continue;
+                        }
+
+                        let endDate = new Date(allocatorCurrentDate);
+                        endDate.setDate(endDate.getDate() + allocCycle - 1);
+                        let endDateString = endDate.toISOString().split('T')[0];
+
+                        if (deficitOccurred) {
+                            uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
+                            allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                            daysAssigned += allocCycle;
                             continue;
                         }
 
@@ -501,39 +516,92 @@ async function generateDistribution() {
                         let currentWeek = Math.ceil(allocatorCurrentDate.getDate() / 7);
                         if (currentWeek > 4) currentWeek = 4;
 
-                        const hasElectroConflict = (studentName) => {
+                        const hasElectroConflict = (studentName, checkAbsMonth, checkWeek) => {
                             return window.electroRegistry.some(record => 
                                 record.name === studentName && 
                                 record.p === p && 
-                                record.m === currentAbsoluteMonth && 
-                                record.w === currentWeek 
+                                record.m === checkAbsMonth && 
+                                record.w === checkWeek 
                             );
                         };
 
-                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
-                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
+                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
+                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
                         
                         let pickedM = availM.slice(0, allocMaleReq);
                         let pickedF = availF.slice(0, allocFemaleReq);
                         let picked = [...pickedM, ...pickedF];
                         
                         if (picked.length < (allocMaleReq + allocFemaleReq)) {
-                            if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { break; } else { return; }
+                            if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { 
+                                deficitOccurred = true;
+                                uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
+                                allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
+                                daysAssigned += allocCycle;
+                                continue;
+                            } else { return; }
                         }
 
                         usedAllocators.push(...picked);
                         
-                        let endDate = new Date(allocatorCurrentDate);
-                        endDate.setDate(endDate.getDate() + allocCycle - 1);
-                        html += `<tr><td>من ${dateString} <br>إلى ${endDate.toISOString().split('T')[0]}</td><td><ol class="student-list"><li>${picked.join('</li><li>')}</li></ol></td><td>دورة ${allocCycle} أيام</td></tr>`;
+                        allocCyclesData.push({
+                            isOff: false,
+                            startDate: dateString,
+                            endDate: endDateString,
+                            picked: picked,
+                            hasExtra: false,
+                            absMonth: currentAbsoluteMonth,
+                            week: currentWeek,
+                            cycleDays: allocCycle
+                        });
                         
                         allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + allocCycle);
                         daysAssigned += allocCycle;
                     }
                     
                     let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
+                    
+                    // --- توزيع الفائض العشوائي ---
+                    if (allocDistributeSurplus && unassigned.length > 0) {
+                        let activeCycles = allocCyclesData.filter(c => !c.isOff);
+                        let surplusPool = shuffle([...unassigned]);
+                        
+                        for (let student of surplusPool) {
+                            let availableCycles = shuffle(activeCycles.filter(c => !c.hasExtra));
+                            for (let cycle of availableCycles) {
+                                // التأكد من عدم وجود تعارض مع العلاج الكهربائي في أسبوع هذه الدورة
+                                const conflict = window.electroRegistry.some(record => 
+                                    record.name === student && 
+                                    record.p === p && 
+                                    record.m === cycle.absMonth && 
+                                    record.w === cycle.week 
+                                );
+                                if (!conflict) {
+                                    cycle.picked.push(student);
+                                    cycle.hasExtra = true;
+                                    unassigned = unassigned.filter(s => s !== student);
+                                    usedAllocators.push(student);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // --- بناء الـ HTML ---
+                    allocCyclesData.forEach(cycle => {
+                        if (cycle.isOff) {
+                            html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
+                        } else {
+                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${cycle.picked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${cycle.hasExtra ? '<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(طالب إضافي من الفائض)</span>' : ''}</td></tr>`;
+                        }
+                    });
+
+                    if (uncoveredDays.length > 0) {
+                        html += `<tr style="background:#fef2f2;"><td colspan="3"><strong style="color:#dc2626; font-size: 1.1em;">أيام غير مغطاة (عجز في الطلاب):</strong><br> ${uncoveredDays.join('<br>')}</td></tr>`;
+                    }
+
                     if (unassigned.length > 0) {
-                        html += `<tr style="background:#fef2f2;"><td colspan="3"><strong style="color:red;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
                     }
 
                     html += `</tbody></table></div>`;
