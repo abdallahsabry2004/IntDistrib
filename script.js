@@ -264,12 +264,12 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-// نظام المحاكاة الذكي (Best-of-N Iterations)
+// تم زيادة عدد المحاولات (Iterations) إلى 200 لضمان الحصول على أقل تكرار ممكن
 function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
     let bestSim = null;
     let lowestPenalty = Infinity;
 
-    for (let sim = 0; sim < 50; sim++) {
+    for (let sim = 0; sim < 200; sim++) {
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -309,7 +309,7 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
             lowestPenalty = penalty;
             bestSim = schedules;
         }
-        if (lowestPenalty === 0) break; 
+        if (lowestPenalty === 0) break; // لو لقى المسار المثالي بيوقف المحاكاة عشان يوفر وقت
     }
     return { schedules: bestSim, penalty: lowestPenalty };
 }
@@ -325,7 +325,7 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// دالة الترتيب الاستباقي المصححة (Priority Sorting / Look-ahead)
+// دالة الترتيب الاستباقي المصححة والمؤمنة ضد الأخطاء (Safety Checked Look-ahead)
 function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
     if (requiredCount === 0) return [];
     
@@ -340,10 +340,10 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         return true;
     });
 
-    // تم تصحيح طريقة الوصول لـ monthAssignments لتجنب خطأ undefined
     validAvailable.sort((a, b) => {
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+        // إضافة الفحص الأمن (sched && sched[a]) لمنع ظهور خطأ undefined
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
         return scoreB - scoreA;
     });
 
@@ -383,7 +383,6 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     return picked; 
 }
 
-// دالة سحب الطلاب المكررين لتعويض العجز
 function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
     if (requiredCount === 0) return [];
     
@@ -518,8 +517,8 @@ async function generateDistribution() {
 
                 if (simResult.penalty > 0) {
                     let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام للمجموعة ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 50 محاكاة عشوائية، ولكن لا توجد سعة كافية لمنع التكرار تماماً في هذه الفترة.\n`;
-                    msg += `لتنفيذ أفضل مسار وجده النظام، يجب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
+                    msg += `تم تنفيذ 200 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
                         fatalErrorOccurred = true; break;
@@ -821,7 +820,7 @@ function printAdminTable() {
         h3 { color: #1e3a8a; page-break-after: avoid; }
         .period-section { page-break-inside: avoid; page-break-after: always; }
         .period-section:last-child { page-break-after: auto; }
-    </style></head><body><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
+    </style></head><body><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
@@ -882,7 +881,7 @@ function exportAdminToWord() {
         .page-break { mso-special-character: line-break; page-break-before: always; }
     </style>`;
     let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
+    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
     
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
