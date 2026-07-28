@@ -19,7 +19,57 @@ document.getElementById('workMode').addEventListener('change', updatePeriodSumma
 document.getElementById('enableAllocator').addEventListener('change', function() {
     document.getElementById('allocatorSettings').style.display = this.checked ? 'block' : 'none';
 });
+// مستمعات الأحداث الخاصة بالمساعد الذكي للـ Allocator
+document.getElementById('allocCycle').addEventListener('input', updateAllocatorSuggestion);
+document.getElementById('allocMale').addEventListener('input', updateAllocatorSuggestion);
+document.getElementById('allocFemale').addEventListener('input', updateAllocatorSuggestion);
+document.getElementById('allocWeekend').addEventListener('change', updateAllocatorSuggestion);
+document.getElementById('enableAllocator').addEventListener('change', function() {
+    document.getElementById('allocatorSettings').style.display = this.checked ? 'block' : 'none';
+    updateAllocatorSuggestion();
+});
 
+// دالة المساعد الذكي لحساب النصيحة المثالية
+function updateAllocatorSuggestion() {
+    if (!document.getElementById('enableAllocator').checked) {
+        document.getElementById('allocatorSuggestion').style.display = 'none';
+        return;
+    }
+
+    let malesTotal = parseInt(document.getElementById('maleCount').innerText) || 0;
+    let femalesTotal = parseInt(document.getElementById('femaleCount').innerText) || 0;
+    let mandatoryMonths = parseInt(document.getElementById('mandatoryMonths').value) || 1;
+    let numPeriods = 12 / mandatoryMonths;
+
+    // حساب متوسط طلاب الفترة
+    let cohortM = Math.floor(malesTotal / numPeriods);
+    let cohortF = Math.floor(femalesTotal / numPeriods);
+    let totalCohort = cohortM + cohortF;
+
+    let allocCycle = parseInt(document.getElementById('allocCycle').value) || 1;
+    
+    // حساب أيام العمل التقريبية بناءً على العطلات الأسبوعية
+    let weekendsCount = document.getElementById('allocWeekend').value.split(',').length;
+    let workDaysPerMonth = 30 - (weekendsCount * 4); // تقديرياً
+    let estWorkDays = mandatoryMonths * workDaysPerMonth;
+    
+    let totalCycles = Math.floor(estWorkDays / allocCycle);
+    if(totalCycles === 0) totalCycles = 1;
+
+    // النصيحة المثالية
+    let suggestedM = Math.floor(cohortM / totalCycles);
+    let suggestedF = Math.floor(cohortF / totalCycles);
+
+    let msg = `💡 <strong>المساعد الذكي (Allocator Advisor):</strong><br>`;
+    msg += `• المتاح في الفترة الواحدة تقريباً <strong>${cohortM} ذكور</strong> و <strong>${cohortF} إناث</strong>.<br>`;
+    msg += `• بناءً على إعداداتك، يوجد حوالي <strong>${estWorkDays} يوم عمل</strong>، مما يعني وجود <strong>${totalCycles} دورة</strong> (تتجدد كل ${allocCycle} أيام).<br><br>`;
+    msg += `✅ <strong>النصيحة لتجنب الفائض أو العجز:</strong><br>`;
+    msg += `اجعل المطلوب في الدورة الواحدة: <strong style="color:#16a34a; font-size:1.1em;">${suggestedM} ذكور</strong> و <strong style="color:#16a34a; font-size:1.1em;">${suggestedF} إناث</strong>.`;
+
+    let suggestionBox = document.getElementById('allocatorSuggestion');
+    suggestionBox.innerHTML = msg;
+    suggestionBox.style.display = 'block';
+}
 // ============================================================================
 // دوال واجهة المستخدم (UI Functions)
 // ============================================================================
@@ -395,8 +445,17 @@ async function generateDistribution() {
                         }
                         
                         let weekList = [];
-                        if (pickedM) { globalUsedElectroMales.push(...pickedM); weekList.push(...pickedM); }
-                        if (pickedF) { globalUsedElectroFemales.push(...pickedF); weekList.push(...pickedF); }
+                    // حفظ اسم الطالب مع تحديد فترة عمله بدقة (الفترة، الشهر، الأسبوع) لمنعه في نفس الأسبوع فقط
+                    if (pickedM) { 
+                        pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w})); 
+                        globalUsedElectroMales.push(...pickedM); 
+                        weekList.push(...pickedM); 
+                    }
+                    if (pickedF) { 
+                        pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w})); 
+                        globalUsedElectroFemales.push(...pickedF); 
+                        weekList.push(...pickedF); 
+                    }
                         
                         html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
                     }
@@ -436,8 +495,24 @@ async function generateDistribution() {
                     let monthIdx = Math.floor(daysAssigned / 30) % mandatoryMonths;
                     let monthAssig = gInfo.schedules[monthIdx];
                     
-                    let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroMales.includes(s)));
-                    let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !globalUsedElectroFemales.includes(s)));
+                    // حساب نحن في أي شهر (1-based) وأي أسبوع (1 إلى 4) تقريباً بناءً على التاريخ
+                    let currentAbsoluteMonth = Math.floor(daysAssigned / 30) + 1; 
+                    let currentWeek = Math.ceil(allocatorCurrentDate.getDate() / 7);
+                    if (currentWeek > 4) currentWeek = 4; // الحد الأقصى 4 أسابيع للشهر
+
+                    // دالة مساعدة للتحقق إذا كان الطالب لديه علاج كهربائي في نفس الأسبوع الحالي
+                    const hasElectroConflict = (studentName) => {
+                        return window.electroRegistry.some(record => 
+                            record.name === studentName && 
+                            record.p === p && // نفس الفترة
+                            record.m === currentAbsoluteMonth && // نفس الشهر
+                            record.w === currentWeek // نفس الأسبوع
+                        );
+                    };
+
+                    // تصفية الطلاب: استبعاد الحكيم، والمستخدمين مسبقاً في الـ Allocator، ومن لديهم تعارض Electrotherapy في نفس الأسبوع فقط!
+                    let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
+                    let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
                     
                     let pickedM = availM.slice(0, allocMaleReq);
                     let pickedF = availF.slice(0, allocFemaleReq);
