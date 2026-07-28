@@ -184,7 +184,7 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     let currentFemaleSum = finalFemaleCaps.reduce((a, b) => a + b, 0);
     let maleSurplus = targetMales - currentMaleSum;
     let femaleSurplus = targetFemales - currentFemaleSum;
-    let eligibleIndices = [0, 1, 2, 3, 4, 5]; // الحكيم مستثنى برقم الإندكس
+    let eligibleIndices = [0, 1, 2, 3, 4, 5]; 
     
     if (maleSurplus > 0 || femaleSurplus > 0) {
         let safeCounter = 0;
@@ -214,7 +214,6 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     return { males: finalMaleCaps, females: finalFemaleCaps };
 }
 
-// دالة التوزيع المحدثة لدعم خيار السماح بالتكرار (allowRepetition)
 function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, allowRepetition = false) {
     let assignments = {};
     departmentsList.forEach(d => assignments[d] = []);
@@ -222,37 +221,28 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     let caps = [...targetCaps];
     let shuffledStudents = shuffle([...students]);
     let failed = false;
-    let errorData = null;
-    let repeatedStudents = []; // لتسجيل من تم تكراره
+    let repeatedStudents = []; 
 
     for (let student of shuffledStudents) {
         let validIndices = [];
-        let availableIndices = []; // الأقسام اللي فيها مكان متاح بغض النظر عن الزيارة
+        let availableIndices = []; 
 
         caps.forEach((cap, idx) => {
             if (cap > 0) {
                 availableIndices.push(idx);
                 if (!newHistory[student].includes(departmentsList[idx])) {
-                    validIndices.push(idx); // الأقسام المتاحة ولم يزرها الطالب
+                    validIndices.push(idx); 
                 }
             }
         });
 
         if (validIndices.length === 0) { 
-            // لا يوجد قسم جديد للطالب
             if (!allowRepetition) {
                 failed = true; 
-                let availableDepts = availableIndices.map(idx => `${departmentsList[idx]} (متبقي ${caps[idx]})`);
-                errorData = {
-                    student: student,
-                    visited: newHistory[student],
-                    available: availableDepts
-                };
-                break; // توقف وسجل الخطأ
+                break; 
             } else {
-                // المستخدم وافق على التكرار كحل أخير
                 if (availableIndices.length === 0) {
-                    failed = true; break; // فشل رياضي (السعة لا تكفي الدفعة)
+                    failed = true; break; 
                 }
                 let chosenIdx = availableIndices[Math.floor(Math.random() * availableIndices.length)];
                 let chosenDept = departmentsList[chosenIdx];
@@ -260,10 +250,9 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
                 caps[chosenIdx]--;
                 assignments[chosenDept].push(student);
                 newHistory[student].push(chosenDept);
-                repeatedStudents.push(student); // تسجيل الطالب كمكرر
+                repeatedStudents.push(student); 
             }
         } else {
-            // التسكين الطبيعي
             let chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
             let chosenDept = departmentsList[chosenIdx];
             
@@ -272,7 +261,58 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
             newHistory[student].push(chosenDept);
         }
     }
-    return { success: !failed, assignments: assignments, history: newHistory, error: errorData, repeatedStudents: repeatedStudents };
+    return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
+}
+
+// دالة المحاكاة (Best-of-N Iterations) للحصول على أفضل توزيع بأقل تكرار ممكن
+function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
+    let bestSim = null;
+    let lowestPenalty = Infinity;
+
+    for (let sim = 0; sim < 50; sim++) {
+        let currentHistory = {};
+        groupM.concat(groupF).forEach(s => currentHistory[s] = []);
+        let schedules = [];
+        let penalty = 0;
+        let simFailed = false;
+
+        for (let m = 1; m <= mandatoryMonths; m++) {
+            let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, groupM.length, groupF.length);
+            
+            // محاولة التوزيع بدون تكرار
+            let maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, false);
+            if (!maleAssign.success) maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, true);
+            
+            let femaleAssign = assignStudentsToDepartmentsSmart(groupF, adjustedCaps.females, maleAssign.history, false);
+            if (!femaleAssign.success) femaleAssign = assignStudentsToDepartmentsSmart(groupF, adjustedCaps.females, maleAssign.history, true);
+
+            if (!maleAssign.success || !femaleAssign.success) {
+                simFailed = true; break; 
+            }
+
+            currentHistory = femaleAssign.history;
+            penalty += maleAssign.repeatedStudents.length + femaleAssign.repeatedStudents.length;
+            
+            let monthAssignments = {};
+            departmentsList.forEach(dept => {
+                if (maleAssign.assignments[dept]) maleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
+                if (femaleAssign.assignments[dept]) femaleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
+            });
+
+            schedules.push({
+                maleAssign: maleAssign,
+                femaleAssign: femaleAssign,
+                monthAssignments: monthAssignments
+            });
+        }
+
+        if (!simFailed && penalty < lowestPenalty) {
+            lowestPenalty = penalty;
+            bestSim = schedules;
+        }
+        if (lowestPenalty === 0) break; 
+    }
+    return { schedules: bestSim, penalty: lowestPenalty };
 }
 
 async function fetchPublicHolidays(year) {
@@ -286,7 +326,8 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray) {
+// الترتيب الاستباقي (Priority Sorting / Look-ahead)
+function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
     if (requiredCount === 0) return [];
     
     let available = pool.filter(s => !usedGlobal.includes(s));
@@ -298,6 +339,13 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         let cap = maxCapsArray[deptIdx];
         if (cap === 0) return false; 
         return true;
+    });
+
+    // إعطاء أولوية للطلاب اللي هينزلوا الحكيم في الشهور التانية
+    validAvailable.sort((a, b) => {
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
+        return scoreB - scoreA;
     });
 
     let picked = [];
@@ -327,14 +375,33 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
 
         if (deptsWithAvailable.length === 0) break;
 
-        let randDept = deptsWithAvailable[Math.floor(Math.random() * deptsWithAvailable.length)];
-        let student = shuffle(byDept[randDept]).pop();
+        let randDept = deptsWithAvailable[0]; // تم اختيار أول قسم لوجود الأولوية
+        let student = byDept[randDept].shift(); // السحب من بداية المصفوفة المرتبة
         picked.push(student);
         deptCounts[randDept]++;
     }
 
     return picked; 
 }
+
+// دالة لسحب طلاب مكررين لسد عجز العلاج الكهربائي
+function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
+    if (requiredCount === 0) return [];
+    
+    // سحب من الـ usedGlobal بس بشرط ميكنش قسم الحكيم وميكنش متسجل في نفس الاسبوع
+    let availableForRepeat = usedGlobal.filter(s => pool.includes(s)); 
+    let validForRepeat = availableForRepeat.filter(s => {
+        let dept = monthAssignments[s];
+        if (!dept || dept === 'قسم (الحكيم)') return false;
+        
+        // هل الطالب متسجل في نفس الأسبوع؟
+        let conflictThisWeek = window.electroRegistry.some(r => r.name === s && r.p === currentP && r.m === currentM && r.w === currentW);
+        return !conflictThisWeek;
+    });
+
+    return shuffle(validForRepeat).slice(0, requiredCount);
+}
+
 
 // ============================================================================
 // الخوارزمية الرئيسية (Main Generation)
@@ -440,90 +507,56 @@ async function generateDistribution() {
             let monthlySchedules = []; 
             let periodUsedElectroMales = [];
             let periodUsedElectroFemales = [];
-
             let fatalErrorOccurred = false; 
 
             for (let group of periodGroups) {
                 if (fatalErrorOccurred) break;
 
+                // استدعاء نظام المحاكاة للحصول على المسار الأمثل (بدون أو بأقل تكرار)
+                let simResult = simulatePeriodDepartments(group, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
+                
+                if (!simResult.schedules) {
+                    alert(`⚠️ فشل رياضي في توزيع المجموعة: ${group.name}. السعة المتاحة أقل من عدد الدفعة. الرجاء مراجعة سعة الأقسام.`);
+                    fatalErrorOccurred = true; break;
+                }
+
+                // طلب الإذن لو كان المسار الأمثل يحتوي على تكرار إجباري
+                if (simResult.penalty > 0) {
+                    let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام للمجموعة ${group.name}]\n\n`;
+                    msg += `تم تنفيذ 50 محاكاة عشوائية، ولكن لا توجد سعة كافية لمنع التكرار تماماً في هذه الفترة.\n`;
+                    msg += `لتنفيذ أفضل مسار وجده النظام، يجب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
+                    msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
+                    if (!confirm(msg)) {
+                        fatalErrorOccurred = true; break;
+                    }
+                }
+
                 html += `<h4>توزيع الأقسام: ${group.name}</h4><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th>${departmentsList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
                 
-                let history = {};
-                group.m.concat(group.f).forEach(s => history[s] = []);
                 let groupSchedules = [];
 
                 for (let m = 1; m <= mandatoryMonths; m++) {
                     let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                     html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                     
-                    let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, group.m.length, group.f.length);
-                    let maleAssignment, femaleAssignment;
-                    
-                    // محاولة التوزيع 50 مرة بدون تكرار
-                    for(let attempt=0; attempt<50; attempt++) { 
-                        maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history, false); 
-                        if(maleAssignment.success) break; 
-                    }
-                    
-                    if (!maleAssignment.success) {
-                        let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام - ذكور]\n\n`;
-                        msg += `الشهر: ${mName} | المجموعة: ${group.name}\n`;
-                        msg += `تم استنفاذ كل الطرق الممكنة لتجنب التكرار. الطالب "${maleAssignment.error.student}" زار كل الأقسام المتاحة حالياً.\n\n`;
-                        msg += `الأقسام التي زارها مسبقاً: ${maleAssignment.error.visited.join('، ')}\n`;
-                        msg += `الأقسام المتبقي بها سعة الآن: ${maleAssignment.error.available.length > 0 ? maleAssignment.error.available.join(' | ') : 'لا يوجد'}\n\n`;
-                        msg += `هل توافق على "تكرار" هذا الطالب في أحد الأقسام المتاحة لإنقاذ التوزيع؟\n(في حالة الموافقة سيتم تمييز اسمه بلون أحمر في الجدول)`;
-                        
-                        if (confirm(msg)) {
-                            // السماح بالتكرار استثنائياً
-                            maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history, true);
-                        } else {
-                            fatalErrorOccurred = true; return; 
-                        }
-                    }
+                    let mData = simResult.schedules[m-1];
+                    let monthAssignments = mData.monthAssignments;
 
-                    // نفس المحاولة للاناث
-                    for(let attempt=0; attempt<50; attempt++) { 
-                        femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.history, false); 
-                        if(femaleAssignment.success) break; 
-                    }
-
-                    if (!femaleAssignment.success) {
-                        let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام - إناث]\n\n`;
-                        msg += `الشهر: ${mName} | المجموعة: ${group.name}\n`;
-                        msg += `تم استنفاذ كل الطرق الممكنة لتجنب التكرار. الطالبة "${femaleAssignment.error.student}" زارت كل الأقسام المتاحة حالياً.\n\n`;
-                        msg += `الأقسام التي زارتها مسبقاً: ${femaleAssignment.error.visited.join('، ')}\n`;
-                        msg += `الأقسام المتبقي بها سعة الآن: ${femaleAssignment.error.available.length > 0 ? femaleAssignment.error.available.join(' | ') : 'لا يوجد'}\n\n`;
-                        msg += `هل توافق على "تكرار" هذه الطالبة في أحد الأقسام المتاحة لإنقاذ التوزيع؟\n(في حالة الموافقة سيتم تمييز اسمها بلون أحمر في الجدول)`;
-                        
-                        if (confirm(msg)) {
-                            femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.history, true);
-                        } else {
-                            fatalErrorOccurred = true; return; 
-                        }
-                    }
-
-                    history = femaleAssignment.history;
-
-                    let monthAssignments = {}; 
                     departmentsList.forEach(dept => {
                         let cellStudents = [];
                         
-                        if (maleAssignment.assignments[dept]) {
-                            maleAssignment.assignments[dept].forEach(s => {
-                                // التعديل الجديد: التمييز بلون أحمر فقط للخط بدون خلفية أو حدود أو كلمة مكرر
-                                let isRepeated = maleAssignment.repeatedStudents && maleAssignment.repeatedStudents.includes(s);
+                        if (mData.maleAssign.assignments[dept]) {
+                            mData.maleAssign.assignments[dept].forEach(s => {
+                                let isRepeated = mData.maleAssign.repeatedStudents.includes(s);
                                 let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
                                 cellStudents.push(displayStr);
-                                monthAssignments[s] = dept; // حفظ الاسم النظيف للـ Logic
                             });
                         }
-                        if (femaleAssignment.assignments[dept]) {
-                            femaleAssignment.assignments[dept].forEach(s => {
-                                // التعديل الجديد
-                                let isRepeated = femaleAssignment.repeatedStudents && femaleAssignment.repeatedStudents.includes(s);
+                        if (mData.femaleAssign.assignments[dept]) {
+                            mData.femaleAssign.assignments[dept].forEach(s => {
+                                let isRepeated = mData.femaleAssign.repeatedStudents.includes(s);
                                 let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
                                 cellStudents.push(displayStr);
-                                monthAssignments[s] = dept; 
                             });
                         }
                         html += `<td>${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
@@ -550,26 +583,44 @@ async function generateDistribution() {
                         let monthAssig = gInfo.schedules[m-1];
 
                         for (let w = 1; w <= 4; w++) {
-                            let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM);
-                            let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF);
+                            // استخدام الترتيب الاستباقي
+                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1);
+                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1);
                             
-                            if ((electroMaleReq > 0 && pickedM.length < electroMaleReq) || (electroFemaleReq > 0 && pickedF.length < electroFemaleReq)) {
-                                let msg = `⚠️ [تحليل النظام: عجز في العلاج الكهربائي]\nلم يتم تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالقيود التي حددتها تمنع إكمال العدد، أو تم استنفاذ الطلاب المتاحين.\n\nهل تريد الاستمرار وترك العجز كما هو في هذا الأسبوع؟`;
-                                if (!confirm(msg)) {
-                                    return;
+                            let missingM = electroMaleReq - pickedM.length;
+                            let missingF = electroFemaleReq - pickedF.length;
+
+                            if (missingM > 0 || missingF > 0) {
+                                let msg = `⚠️ [عجز في العلاج الكهربائي - الدورة ${w} لشهر ${mName}]\n\nالعدد المتاح للذكور: ${pickedM.length}/${electroMaleReq} | للإناث: ${pickedF.length}/${electroFemaleReq}\n\nهل توافق على تكرار طلاب (نزلوا علاج كهربائي في أسابيع سابقة) لسد العجز وتلوينهم بالأحمر؟`;
+                                if (confirm(msg)) {
+                                    if (missingM > 0) {
+                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w);
+                                        pickedM.push(...extraM);
+                                    }
+                                    if (missingF > 0) {
+                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w);
+                                        pickedF.push(...extraF);
+                                    }
                                 }
                             }
                             
                             let weekList = [];
                             if (pickedM && pickedM.length > 0) { 
-                                pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
-                                periodUsedElectroMales.push(...pickedM); 
-                                weekList.push(...pickedM); 
+                                pickedM.forEach(s => {
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    // إذا كان الطالب موجود مسبقاً في السجل، فهو مكرر
+                                    let isRep = periodUsedElectroMales.includes(s);
+                                    if (!isRep) periodUsedElectroMales.push(s);
+                                    weekList.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                                });
                             }
                             if (pickedF && pickedF.length > 0) { 
-                                pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
-                                periodUsedElectroFemales.push(...pickedF); 
-                                weekList.push(...pickedF); 
+                                pickedF.forEach(s => {
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    let isRep = periodUsedElectroFemales.includes(s);
+                                    if (!isRep) periodUsedElectroFemales.push(s);
+                                    weekList.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                                });
                             }
                             
                             html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
@@ -579,7 +630,7 @@ async function generateDistribution() {
                     
                     let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !periodUsedElectroMales.includes(s) && !periodUsedElectroFemales.includes(s));
                     if (unassignedElectro.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم استهلاكهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
                     }
                     
                     html += `</tbody></table></div>`;
@@ -741,7 +792,7 @@ async function generateDistribution() {
                     }
 
                     if (unassigned.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم توزيعهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
                     }
 
                     html += `</tbody></table></div>`;
