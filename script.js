@@ -571,7 +571,7 @@ async function generateDistribution() {
                 html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
                 
                 for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعـــــــــة</th></tr></thead><tbody>`;
+                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
                     
                     for (let m = 1; m <= mandatoryMonths; m++) {
                         let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
@@ -624,7 +624,7 @@ async function generateDistribution() {
                     
                     let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !periodUsedElectroMales.includes(s) && !periodUsedElectroFemales.includes(s));
                     if (unassignedElectro.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم استهلاكهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
                     }
                     
                     html += `</tbody></table></div>`;
@@ -786,7 +786,7 @@ async function generateDistribution() {
                     }
 
                     if (unassigned.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم توزيعهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
                     }
 
                     html += `</tbody></table></div>`;
@@ -822,7 +822,7 @@ function printAdminTable() {
         h3 { color: #1e3a8a; page-break-after: avoid; }
         .period-section { page-break-inside: avoid; page-break-after: always; }
         .period-section:last-child { page-break-after: auto; }
-    </style></head><body><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    </style></head><body><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
 
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
@@ -883,7 +883,7 @@ function exportAdminToWord() {
         .page-break { mso-special-character: line-break; page-break-before: always; }
     </style>`;
     let html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف أسماء الطلاب الموزعين (شئون الامتياز)</h2>`;
+    <head><meta charset='utf-8'><title>كشف شئون الامتياز</title>${css}</head><body><div class="WordSection1"><h2>كشف اسماء توزيع طلاب الأمتياز في الشهور الإجبارية</h2>`;
     
     window.lastDistributionData.forEach((data, index) => {
         let periodStartAbsolute = index * data.mandatoryMonths;
