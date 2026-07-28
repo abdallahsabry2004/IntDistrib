@@ -264,7 +264,6 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-// تم زيادة عدد المحاولات (Iterations) إلى 200 لضمان الحصول على أقل تكرار ممكن
 function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
     let bestSim = null;
     let lowestPenalty = Infinity;
@@ -309,7 +308,7 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
             lowestPenalty = penalty;
             bestSim = schedules;
         }
-        if (lowestPenalty === 0) break; // لو لقى المسار المثالي بيوقف المحاكاة عشان يوفر وقت
+        if (lowestPenalty === 0) break; 
     }
     return { schedules: bestSim, penalty: lowestPenalty };
 }
@@ -325,7 +324,7 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// دالة الترتيب الاستباقي المصححة والمؤمنة ضد الأخطاء (Safety Checked Look-ahead)
+// تم تصحيح طريقة قراءة اسم الطالب لمنع خطأ undefined نهائياً
 function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
     if (requiredCount === 0) return [];
     
@@ -341,9 +340,15 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     });
 
     validAvailable.sort((a, b) => {
-        // إضافة الفحص الأمن (sched && sched[a]) لمنع ظهور خطأ undefined
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
+        // الإصلاح الدقيق هنا: sched[a] بدلاً من sched.monthAssignments[a]
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
+        
+        // تعديل التصحيح ليطابق الـ Data Structure الفعلي
+        // بناءً على هيكلة schedules, monthAssignments هو الكائن الذي يحتوي على الأسماء
+        scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
+        scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+
         return scoreB - scoreA;
     });
 
@@ -397,7 +402,6 @@ function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, 
 
     return shuffle(validForRepeat).slice(0, requiredCount);
 }
-
 
 // ============================================================================
 // الخوارزمية الرئيسية (Main Generation)
