@@ -60,8 +60,8 @@ function buildDepartmentsTable() {
 function updateCounts() {
     const malesVal = document.getElementById('maleNames')?.value || '';
     const femalesVal = document.getElementById('femaleNames')?.value || '';
-    const males = malesVal.split('\n').filter(n => n.trim() !== '');
-    const females = femalesVal.split('\n').filter(n => n.trim() !== '');
+    const males = malesVal.split('\n').map(n => n.trim()).filter(n => n !== '');
+    const females = femalesVal.split('\n').map(n => n.trim()).filter(n => n !== '');
     
     if (document.getElementById('maleCount')) document.getElementById('maleCount').innerText = males.length;
     if (document.getElementById('femaleCount')) document.getElementById('femaleCount').innerText = females.length;
@@ -217,13 +217,14 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
 function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, allowRepetition = false) {
     let assignments = {};
     departmentsList.forEach(d => assignments[d] = []);
-    let newHistory = JSON.parse(JSON.stringify(currentHistory));
+    let newHistory = JSON.parse(JSON.stringify(currentHistory || {}));
     let caps = [...targetCaps];
     let shuffledStudents = shuffle([...students]);
     let failed = false;
     let repeatedStudents = []; 
 
     for (let student of shuffledStudents) {
+        if (!newHistory[student]) newHistory[student] = [];
         let validIndices = [];
         let availableIndices = []; 
 
@@ -268,7 +269,7 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
     let bestSim = null;
     let lowestPenalty = Infinity;
 
-    for (let sim = 0; sim < 200; sim++) {
+    for (let sim = 0; sim < 300; sim++) {
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -324,9 +325,9 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// تم تصحيح طريقة قراءة اسم الطالب لمنع خطأ undefined نهائياً
+// دالة الترتيب الاستباقي المؤمنة بالكامل
 function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
-    if (requiredCount === 0) return [];
+    if (requiredCount === 0 || !monthAssignments) return [];
     
     let available = pool.filter(s => !usedGlobal.includes(s));
     let validAvailable = available.filter(s => {
@@ -340,15 +341,8 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     });
 
     validAvailable.sort((a, b) => {
-        // الإصلاح الدقيق هنا: sched[a] بدلاً من sched.monthAssignments[a]
         let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
         let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
-        
-        // تعديل التصحيح ليطابق الـ Data Structure الفعلي
-        // بناءً على هيكلة schedules, monthAssignments هو الكائن الذي يحتوي على الأسماء
-        scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
-        scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
-
         return scoreB - scoreA;
     });
 
@@ -359,7 +353,8 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     let byDept = {};
     departmentsList.forEach(d => byDept[d] = []);
     validAvailable.forEach(s => {
-        if(monthAssignments[s]) byDept[monthAssignments[s]].push(s);
+        let d = monthAssignments[s];
+        if(d && byDept[d]) byDept[d].push(s);
     });
 
     let attempts = 0;
@@ -381,15 +376,18 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
 
         let randDept = deptsWithAvailable[0]; 
         let student = byDept[randDept].shift(); 
-        picked.push(student);
-        deptCounts[randDept]++;
+        if (student) {
+            picked.push(student);
+            deptCounts[randDept]++;
+        }
     }
 
     return picked; 
 }
 
+// دالة التعويض المؤمنة
 function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
-    if (requiredCount === 0) return [];
+    if (requiredCount === 0 || !monthAssignments) return [];
     
     let availableForRepeat = usedGlobal.filter(s => pool.includes(s)); 
     let validForRepeat = availableForRepeat.filter(s => {
@@ -414,8 +412,8 @@ async function generateDistribution() {
 
         const malesVal = document.getElementById('maleNames')?.value || '';
         const femalesVal = document.getElementById('femaleNames')?.value || '';
-        const males = malesVal.split('\n').filter(n => n.trim() !== '');
-        const females = femalesVal.split('\n').filter(n => n.trim() !== '');
+        const males = malesVal.split('\n').map(n => n.trim()).filter(n => n !== '');
+        const females = femalesVal.split('\n').map(n => n.trim()).filter(n => n !== '');
         
         if (males.length === 0 && females.length === 0) { 
             alert("أدخل أسماء الطلاب أولاً."); 
@@ -521,7 +519,7 @@ async function generateDistribution() {
 
                 if (simResult.penalty > 0) {
                     let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام للمجموعة ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 200 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ 300 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
@@ -537,7 +535,7 @@ async function generateDistribution() {
                     let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                     html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                     
-                    let mData = simResult.schedules[m-1];
+                    let mData = simResult.schedules[m-1] || { maleAssign: {assignments:{}, repeatedStudents:[]}, femaleAssign: {assignments:{}, repeatedStudents:[]}, monthAssignments: {} };
                     let monthAssignments = mData.monthAssignments;
 
                     departmentsList.forEach(dept => {
@@ -573,12 +571,12 @@ async function generateDistribution() {
                 html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
                 
                 for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
+                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الدورة الأولى</th><th>الدورة الثانية</th><th>الدورة الثالثة</th><th>الدورة الرابعـــــــــة</th></tr></thead><tbody>`;
                     
                     for (let m = 1; m <= mandatoryMonths; m++) {
                         let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                         html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
-                        let monthAssig = gInfo.schedules[m-1];
+                        let monthAssig = gInfo.schedules[m-1] || {};
 
                         for (let w = 1; w <= 4; w++) {
                             let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1);
@@ -715,8 +713,8 @@ async function generateDistribution() {
                             );
                         };
 
-                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
-                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
+                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
+                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
                         
                         let pickedM = availM.slice(0, allocMaleReq);
                         let pickedF = availF.slice(0, allocFemaleReq);
@@ -749,7 +747,7 @@ async function generateDistribution() {
                         allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                     }
                     
-                    let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
+                    let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0] && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
                     
                     if (allocDistributeSurplus && unassigned.length > 0) {
                         let activeCycles = allocCyclesData.filter(c => !c.isOff);
