@@ -214,7 +214,8 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     return { males: finalMaleCaps, females: finalFemaleCaps };
 }
 
-function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) {
+// دالة التوزيع المحدثة لدعم خيار السماح بالتكرار (allowRepetition)
+function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, allowRepetition = false) {
     let assignments = {};
     departmentsList.forEach(d => assignments[d] = []);
     let newHistory = JSON.parse(JSON.stringify(currentHistory));
@@ -222,38 +223,56 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) 
     let shuffledStudents = shuffle([...students]);
     let failed = false;
     let errorData = null;
+    let repeatedStudents = []; // لتسجيل من تم تكراره
 
     for (let student of shuffledStudents) {
         let validIndices = [];
+        let availableIndices = []; // الأقسام اللي فيها مكان متاح بغض النظر عن الزيارة
+
         caps.forEach((cap, idx) => {
-            if (cap > 0 && !newHistory[student].includes(departmentsList[idx])) {
-                validIndices.push(idx);
+            if (cap > 0) {
+                availableIndices.push(idx);
+                if (!newHistory[student].includes(departmentsList[idx])) {
+                    validIndices.push(idx); // الأقسام المتاحة ولم يزرها الطالب
+                }
             }
         });
 
-        // قاعدة صارمة: إذا لم يجد قسماً جديداً متاحاً، يتوقف ويسجل الخطأ بالتفصيل
         if (validIndices.length === 0) { 
-            failed = true; 
-            let availableDepts = [];
-            caps.forEach((cap, idx) => {
-                if (cap > 0) availableDepts.push(`${departmentsList[idx]} (متبقي ${cap})`);
-            });
-            errorData = {
-                student: student,
-                visited: newHistory[student],
-                available: availableDepts
-            };
-            break; 
+            // لا يوجد قسم جديد للطالب
+            if (!allowRepetition) {
+                failed = true; 
+                let availableDepts = availableIndices.map(idx => `${departmentsList[idx]} (متبقي ${caps[idx]})`);
+                errorData = {
+                    student: student,
+                    visited: newHistory[student],
+                    available: availableDepts
+                };
+                break; // توقف وسجل الخطأ
+            } else {
+                // المستخدم وافق على التكرار كحل أخير
+                if (availableIndices.length === 0) {
+                    failed = true; break; // فشل رياضي (السعة لا تكفي الدفعة)
+                }
+                let chosenIdx = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+                let chosenDept = departmentsList[chosenIdx];
+                
+                caps[chosenIdx]--;
+                assignments[chosenDept].push(student);
+                newHistory[student].push(chosenDept);
+                repeatedStudents.push(student); // تسجيل الطالب كمكرر
+            }
+        } else {
+            // التسكين الطبيعي
+            let chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
+            let chosenDept = departmentsList[chosenIdx];
+            
+            caps[chosenIdx]--;
+            assignments[chosenDept].push(student);
+            newHistory[student].push(chosenDept);
         }
-
-        let chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
-        let chosenDept = departmentsList[chosenIdx];
-        
-        caps[chosenIdx]--;
-        assignments[chosenDept].push(student);
-        newHistory[student].push(chosenDept);
     }
-    return { success: !failed, assignments: assignments, history: newHistory, error: errorData };
+    return { success: !failed, assignments: assignments, history: newHistory, error: errorData, repeatedStudents: repeatedStudents };
 }
 
 async function fetchPublicHolidays(year) {
@@ -422,7 +441,6 @@ async function generateDistribution() {
             let periodUsedElectroMales = [];
             let periodUsedElectroFemales = [];
 
-            // للتحكم في الخروج من الحلقات في حالة وجود خطأ صارم
             let fatalErrorOccurred = false; 
 
             for (let group of periodGroups) {
@@ -441,40 +459,47 @@ async function generateDistribution() {
                     let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, group.m.length, group.f.length);
                     let maleAssignment, femaleAssignment;
                     
-                    // محاولة التوزيع للذكور مع احترام القاعدة الصارمة
+                    // محاولة التوزيع 50 مرة بدون تكرار
                     for(let attempt=0; attempt<50; attempt++) { 
-                        maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history); 
+                        maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history, false); 
                         if(maleAssignment.success) break; 
                     }
                     
                     if (!maleAssignment.success) {
-                        let msg = `⚠️ [تحليل النظام: تعارض في التوزيع الأساسي - ذكور]\n\n`;
+                        let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام - ذكور]\n\n`;
                         msg += `الشهر: ${mName} | المجموعة: ${group.name}\n`;
-                        msg += `لا يمكن تسكين الطالب "${maleAssignment.error.student}" لأنه زار كل الأقسام المتاحة حالياً، والنظام يمنع التكرار نهائياً.\n\n`;
-                        msg += `الأقسام التي زارها الطالب مسبقاً: ${maleAssignment.error.visited.join('، ')}\n`;
+                        msg += `تم استنفاذ كل الطرق الممكنة لتجنب التكرار. الطالب "${maleAssignment.error.student}" زار كل الأقسام المتاحة حالياً.\n\n`;
+                        msg += `الأقسام التي زارها مسبقاً: ${maleAssignment.error.visited.join('، ')}\n`;
                         msg += `الأقسام المتبقي بها سعة الآن: ${maleAssignment.error.available.length > 0 ? maleAssignment.error.available.join(' | ') : 'لا يوجد'}\n\n`;
-                        msg += `💡 الحلول المقترحة:\n1. قم بزيادة السعة الاستيعابية للأقسام الأخرى.\n2. تأكد أن عدد الأقسام المتاحة يناسب عدد الشهور الإجبارية.\n3. اضغط للإنشاء مجدداً فقد تجد الخوارزمية مساراً آخر.`;
-                        alert(msg);
-                        fatalErrorOccurred = true;
-                        return; // إيقاف التوزيع بالكامل
+                        msg += `هل توافق على "تكرار" هذا الطالب في أحد الأقسام المتاحة لإنقاذ التوزيع؟\n(في حالة الموافقة سيتم تمييز اسمه بلون أحمر في الجدول)`;
+                        
+                        if (confirm(msg)) {
+                            // السماح بالتكرار استثنائياً
+                            maleAssignment = assignStudentsToDepartmentsSmart(group.m, adjustedCaps.males, history, true);
+                        } else {
+                            fatalErrorOccurred = true; return; 
+                        }
                     }
 
-                    // محاولة التوزيع للإناث مع احترام القاعدة الصارمة
+                    // نفس المحاولة للاناث
                     for(let attempt=0; attempt<50; attempt++) { 
-                        femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.history); 
+                        femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.history, false); 
                         if(femaleAssignment.success) break; 
                     }
 
                     if (!femaleAssignment.success) {
-                        let msg = `⚠️ [تحليل النظام: تعارض في التوزيع الأساسي - إناث]\n\n`;
+                        let msg = `⚠️ [تحليل النظام: استنفاذ الأقسام - إناث]\n\n`;
                         msg += `الشهر: ${mName} | المجموعة: ${group.name}\n`;
-                        msg += `لا يمكن تسكين الطالبة "${femaleAssignment.error.student}" لأنها زارت كل الأقسام المتاحة حالياً، والنظام يمنع التكرار نهائياً.\n\n`;
+                        msg += `تم استنفاذ كل الطرق الممكنة لتجنب التكرار. الطالبة "${femaleAssignment.error.student}" زارت كل الأقسام المتاحة حالياً.\n\n`;
                         msg += `الأقسام التي زارتها مسبقاً: ${femaleAssignment.error.visited.join('، ')}\n`;
                         msg += `الأقسام المتبقي بها سعة الآن: ${femaleAssignment.error.available.length > 0 ? femaleAssignment.error.available.join(' | ') : 'لا يوجد'}\n\n`;
-                        msg += `💡 الحلول المقترحة:\n1. قم بزيادة السعة الاستيعابية للأقسام الأخرى.\n2. تأكد أن عدد الأقسام المتاحة يناسب عدد الشهور الإجبارية.\n3. اضغط للإنشاء مجدداً فقد تجد الخوارزمية مساراً آخر.`;
-                        alert(msg);
-                        fatalErrorOccurred = true;
-                        return; // إيقاف التوزيع بالكامل
+                        msg += `هل توافق على "تكرار" هذه الطالبة في أحد الأقسام المتاحة لإنقاذ التوزيع؟\n(في حالة الموافقة سيتم تمييز اسمها بلون أحمر في الجدول)`;
+                        
+                        if (confirm(msg)) {
+                            femaleAssignment = assignStudentsToDepartmentsSmart(group.f, adjustedCaps.females, maleAssignment.history, true);
+                        } else {
+                            fatalErrorOccurred = true; return; 
+                        }
                     }
 
                     history = femaleAssignment.history;
@@ -482,13 +507,24 @@ async function generateDistribution() {
                     let monthAssignments = {}; 
                     departmentsList.forEach(dept => {
                         let cellStudents = [];
+                        
                         if (maleAssignment.assignments[dept]) {
-                            cellStudents.push(...maleAssignment.assignments[dept]);
-                            maleAssignment.assignments[dept].forEach(s => monthAssignments[s] = dept);
+                            maleAssignment.assignments[dept].forEach(s => {
+                                // تمييز الطالب المكرر بصرياً
+                                let isRepeated = maleAssignment.repeatedStudents && maleAssignment.repeatedStudents.includes(s);
+                                let displayStr = isRepeated ? `<span style="color: #b91c1c; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #fca5a5;">${s} (مكرر)</span>` : s;
+                                cellStudents.push(displayStr);
+                                monthAssignments[s] = dept; // حفظ الاسم النظيف بدون الـ HTML عشان الـ Allocator
+                            });
                         }
                         if (femaleAssignment.assignments[dept]) {
-                            cellStudents.push(...femaleAssignment.assignments[dept]);
-                            femaleAssignment.assignments[dept].forEach(s => monthAssignments[s] = dept);
+                            femaleAssignment.assignments[dept].forEach(s => {
+                                // تمييز الطالبة المكررة بصرياً
+                                let isRepeated = femaleAssignment.repeatedStudents && femaleAssignment.repeatedStudents.includes(s);
+                                let displayStr = isRepeated ? `<span style="color: #b91c1c; background-color: #fef2f2; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid #fca5a5;">${s} (مكرر)</span>` : s;
+                                cellStudents.push(displayStr);
+                                monthAssignments[s] = dept; // حفظ الاسم النظيف
+                            });
                         }
                         html += `<td>${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
                     });
