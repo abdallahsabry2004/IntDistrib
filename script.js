@@ -4,6 +4,7 @@
 window.globalDistributionPlan = { males: [], females: [] };
 window.lastDistributionData = [];
 window.publicHolidays = [];
+window.electroRegistry = []; // تعريف السجل العام للعلاج الكهربائي
 
 const departmentsList = [
     'قسم الباطنة', 'قسم الجراحة والحروق', 'قسم صحة المرأة', 
@@ -11,14 +12,14 @@ const departmentsList = [
 ];
 const arabicMonths = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
-// الاستماع لتغييرات الأسماء لتحديث العداد
+// ============================================================================
+// مستمعات الأحداث (Event Listeners)
+// ============================================================================
 document.getElementById('maleNames').addEventListener('input', updateCounts);
 document.getElementById('femaleNames').addEventListener('input', updateCounts);
 document.getElementById('mandatoryMonths').addEventListener('change', updatePeriodSummary);
 document.getElementById('workMode').addEventListener('change', updatePeriodSummary);
-document.getElementById('enableAllocator').addEventListener('change', function() {
-    document.getElementById('allocatorSettings').style.display = this.checked ? 'block' : 'none';
-});
+
 // مستمعات الأحداث الخاصة بالمساعد الذكي للـ Allocator
 document.getElementById('allocCycle').addEventListener('input', updateAllocatorSuggestion);
 document.getElementById('allocMale').addEventListener('input', updateAllocatorSuggestion);
@@ -29,49 +30,8 @@ document.getElementById('enableAllocator').addEventListener('change', function()
     updateAllocatorSuggestion();
 });
 
-// دالة المساعد الذكي لحساب النصيحة المثالية
-function updateAllocatorSuggestion() {
-    if (!document.getElementById('enableAllocator').checked) {
-        document.getElementById('allocatorSuggestion').style.display = 'none';
-        return;
-    }
-
-    let malesTotal = parseInt(document.getElementById('maleCount').innerText) || 0;
-    let femalesTotal = parseInt(document.getElementById('femaleCount').innerText) || 0;
-    let mandatoryMonths = parseInt(document.getElementById('mandatoryMonths').value) || 1;
-    let numPeriods = 12 / mandatoryMonths;
-
-    // حساب متوسط طلاب الفترة
-    let cohortM = Math.floor(malesTotal / numPeriods);
-    let cohortF = Math.floor(femalesTotal / numPeriods);
-    let totalCohort = cohortM + cohortF;
-
-    let allocCycle = parseInt(document.getElementById('allocCycle').value) || 1;
-    
-    // حساب أيام العمل التقريبية بناءً على العطلات الأسبوعية
-    let weekendsCount = document.getElementById('allocWeekend').value.split(',').length;
-    let workDaysPerMonth = 30 - (weekendsCount * 4); // تقديرياً
-    let estWorkDays = mandatoryMonths * workDaysPerMonth;
-    
-    let totalCycles = Math.floor(estWorkDays / allocCycle);
-    if(totalCycles === 0) totalCycles = 1;
-
-    // النصيحة المثالية
-    let suggestedM = Math.floor(cohortM / totalCycles);
-    let suggestedF = Math.floor(cohortF / totalCycles);
-
-    let msg = `💡 <strong>المساعد الذكي (Allocator Advisor):</strong><br>`;
-    msg += `• المتاح في الفترة الواحدة تقريباً <strong>${cohortM} ذكور</strong> و <strong>${cohortF} إناث</strong>.<br>`;
-    msg += `• بناءً على إعداداتك، يوجد حوالي <strong>${estWorkDays} يوم عمل</strong>، مما يعني وجود <strong>${totalCycles} دورة</strong> (تتجدد كل ${allocCycle} أيام).<br><br>`;
-    msg += `✅ <strong>النصيحة لتجنب الفائض أو العجز:</strong><br>`;
-    msg += `اجعل المطلوب في الدورة الواحدة: <strong style="color:#16a34a; font-size:1.1em;">${suggestedM} ذكور</strong> و <strong style="color:#16a34a; font-size:1.1em;">${suggestedF} إناث</strong>.`;
-
-    let suggestionBox = document.getElementById('allocatorSuggestion');
-    suggestionBox.innerHTML = msg;
-    suggestionBox.style.display = 'block';
-}
 // ============================================================================
-// دوال واجهة المستخدم (UI Functions)
+// دوال واجهة المستخدم والمساعد الذكي (UI & Smart Advisor)
 // ============================================================================
 function buildDepartmentsTable() {
     const tbody = document.querySelector('#departmentsTable tbody');
@@ -108,6 +68,46 @@ function calculateTotals() {
     document.getElementById('totalFemaleInput').innerText = totalFemale;
 }
 
+// دالة المساعد الذكي لحساب النصيحة المثالية للـ Allocator
+function updateAllocatorSuggestion() {
+    if (!document.getElementById('enableAllocator').checked) {
+        document.getElementById('allocatorSuggestion').style.display = 'none';
+        return;
+    }
+
+    let malesTotal = parseInt(document.getElementById('maleCount').innerText) || 0;
+    let femalesTotal = parseInt(document.getElementById('femaleCount').innerText) || 0;
+    let mandatoryMonths = parseInt(document.getElementById('mandatoryMonths').value) || 1;
+    let numPeriods = 12 / mandatoryMonths;
+
+    let cohortM = Math.floor(malesTotal / numPeriods);
+    let cohortF = Math.floor(femalesTotal / numPeriods);
+
+    let allocCycle = parseInt(document.getElementById('allocCycle').value) || 1;
+    
+    let weekendsCount = document.getElementById('allocWeekend').value.split(',').length;
+    let workDaysPerMonth = 30 - (weekendsCount * 4); 
+    let estWorkDays = mandatoryMonths * workDaysPerMonth;
+    
+    let totalCycles = Math.floor(estWorkDays / allocCycle);
+    if(totalCycles === 0) totalCycles = 1;
+
+    let suggestedM = Math.floor(cohortM / totalCycles);
+    let suggestedF = Math.floor(cohortF / totalCycles);
+
+    let msg = `💡 <strong>المساعد الذكي (Allocator Advisor):</strong><br>`;
+    msg += `• المتاح في الفترة الواحدة تقريباً <strong>${cohortM} ذكور</strong> و <strong>${cohortF} إناث</strong>.<br>`;
+    msg += `• بناءً على إعداداتك، يوجد حوالي <strong>${estWorkDays} يوم عمل</strong>، مما يعني وجود <strong>${totalCycles} دورة</strong> (تتجدد كل ${allocCycle} أيام).<br><br>`;
+    msg += `✅ <strong>النصيحة لتجنب الفائض أو العجز:</strong><br>`;
+    msg += `اجعل المطلوب في الدورة الواحدة: <strong style="color:#16a34a; font-size:1.1em;">${suggestedM} ذكور</strong> و <strong style="color:#16a34a; font-size:1.1em;">${suggestedF} إناث</strong>.`;
+
+    let suggestionBox = document.getElementById('allocatorSuggestion');
+    if (suggestionBox) {
+        suggestionBox.innerHTML = msg;
+        suggestionBox.style.display = 'block';
+    }
+}
+
 // ============================================================================
 // الخوارزميات المساعدة (Helper Algorithms)
 // ============================================================================
@@ -138,7 +138,7 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     let currentFemaleSum = finalFemaleCaps.reduce((a, b) => a + b, 0);
     let maleSurplus = targetMales - currentMaleSum;
     let femaleSurplus = targetFemales - currentFemaleSum;
-    let eligibleIndices = [0, 1, 2, 3, 4, 5]; // الحكيم مستثنى
+    let eligibleIndices = [0, 1, 2, 3, 4, 5]; 
     
     if (maleSurplus > 0 || femaleSurplus > 0) {
         let safeCounter = 0;
@@ -193,7 +193,6 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory) 
     return { success: !failed, assignments: assignments, history: newHistory };
 }
 
-// عرض ملخص الفترات 
 function updatePeriodSummary() {
     const months = parseInt(document.getElementById('mandatoryMonths').value);
     const periodsCount = 12 / months;
@@ -224,7 +223,6 @@ function updatePeriodSummary() {
     document.getElementById('detailedPeriodTable').innerHTML = (totalMales > 0 || totalFemales > 0) ? tableHtml : '';
 }
 
-// جلب الإجازات من الـ API
 async function fetchPublicHolidays(year) {
     try {
         let res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/EG`);
@@ -236,7 +234,6 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// اختيار مسؤولي العلاج الكهربائي باحترام القيود
 function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray) {
     let available = pool.filter(s => !usedGlobal.includes(s));
     let validAvailable = available.filter(s => {
@@ -244,11 +241,11 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         if (dept === 'قسم (الحكيم)') return false;
         let deptIdx = departmentsList.indexOf(dept);
         let cap = maxCapsArray[deptIdx];
-        if (cap === 0) return false; // ممنوع الاختيار من القسم ده
+        if (cap === 0) return false; 
         return true;
     });
 
-    if (validAvailable.length < requiredCount) return null; // العدد المتاح أقل من المطلوب
+    if (validAvailable.length < requiredCount) return null; 
 
     let picked = [];
     let deptCounts = {};
@@ -286,7 +283,7 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
 }
 
 // ============================================================================
-// الخوارزمية الرئيسية (Main Generation) مع نظام التحقق الذكي (Smart Validation)
+// الخوارزمية الرئيسية (Main Generation)
 // ============================================================================
 async function generateDistribution() {
     const males = document.getElementById('maleNames').value.split('\n').filter(n => n.trim() !== '');
@@ -307,7 +304,6 @@ async function generateDistribution() {
     });
     electroMaxCaps[6] = 0; 
 
-    // --- Smart Validation Block 1: Department Capacity ---
     let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
     let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
     let cohortMinMales = Math.floor(males.length / numPeriods);
@@ -317,17 +313,7 @@ async function generateDistribution() {
     let requiredFemalesCheck = is3Days ? sumFemaleCaps * 2 : sumFemaleCaps;
 
     if (requiredMalesCheck > cohortMinMales || requiredFemalesCheck > cohortMinFemales) {
-        let deficitDetails = [];
-        if (requiredMalesCheck > cohortMinMales) deficitDetails.push(`- ذكور: مطلوب (${requiredMalesCheck}) متاح (${cohortMinMales})`);
-        if (requiredFemalesCheck > cohortMinFemales) deficitDetails.push(`- إناث: مطلوب (${requiredFemalesCheck}) متاح (${cohortMinFemales})`);
-        
-        let msg = `⚠️ [تحليل النظام: عجز في سعة الأقسام]\n\n`;
-        msg += `🔍 الحالة:\nالأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في الفترة الإجبارية.\n\n`;
-        msg += `📊 التفاصيل:\n${deficitDetails.join('\n')}\n\n`;
-        msg += `💡 السبب:\nإما أن عدد الدفعة قليل، أو أن نظام (3 أيام) يضاعف الاحتياج لتغطية المجموعتين (أ، ب).\n\n`;
-        msg += `✅ الحلول:\n1. تقليل الأعداد المطلوبة في الأقسام.\n2. زيادة عدد الدفعة.\n\n`;
-        msg += `❓ هل تريد إجبار النظام على الإكمال؟ (سيتم تقليل الأعداد عشوائياً لسد العجز)`;
-        
+        let msg = `⚠️ [تحليل النظام: عجز في سعة الأقسام]\n\nالأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في الفترة.\n❓ هل تريد إجبار النظام على الإكمال وتقليل الأعداد عشوائياً لسد العجز؟`;
         if (!confirm(msg)) return;
     }
 
@@ -352,9 +338,12 @@ async function generateDistribution() {
     let html = '';
     window.lastDistributionData = [];
     
+    // تعريف السجل لتتبع التواريخ والأسابيع بدقة
+    window.electroRegistry = []; 
+    let globalUsedElectroMales = [], globalUsedElectroFemales = [];
+
     const electroMaleReq = parseInt(document.getElementById('electroMale').value) || 0;
     const electroFemaleReq = parseInt(document.getElementById('electroFemale').value) || 0;
-    let globalUsedElectroMales = [], globalUsedElectroFemales = [];
 
     let allocMaleReq = parseInt(document.getElementById('allocMale').value) || 0;
     let allocFemaleReq = parseInt(document.getElementById('allocFemale').value) || 0;
@@ -431,31 +420,23 @@ async function generateDistribution() {
                         let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCaps);
                         let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCaps);
                         
-                        // --- Smart Validation Block 2: Electrotherapy Constraints ---
                         if ((!pickedM && electroMaleReq > 0) || (!pickedF && electroFemaleReq > 0)) {
-                            let typeStr = (!pickedM) ? 'ذكور' : 'إناث';
-                            let reqStr = (!pickedM) ? electroMaleReq : electroFemaleReq;
-                            let msg = `⚠️ [تحليل النظام: فشل تسكين العلاج الكهربائي - ${typeStr}]\n\n`;
-                            msg += `🔍 الحالة:\nلم يتمكن النظام من إيجاد (${reqStr}) طلاب في الدورة (${w}) لشهر (${mName}) في (${gInfo.groupName}).\n\n`;
-                            msg += `💡 السبب:\nالقيود التي حددتها (الحد الأقصى للأقسام) منعت تجميع العدد، أو أن كل الطلاب متاحين في (قسم الحكيم المستثنى)، أو تم استنفاذ الطلاب بالكامل.\n\n`;
-                            msg += `✅ الحلول:\n1. قم بزيادة (الحد الأقصى) المسموح به للأقسام.\n2. قلل العدد المطلوب أسبوعياً.\n\n`;
-                            msg += `العملية توقفت. يرجى تعديل الإعدادات والمحاولة مجدداً.`;
-                            alert(msg);
+                            alert(`⚠️ [تحليل النظام: فشل تسكين العلاج الكهربائي]\nالقيود التي حددتها للأقسام منعت تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالعملية توقفت. يرجى تعديل الإعدادات.`);
                             return;
                         }
                         
                         let weekList = [];
-                    // حفظ اسم الطالب مع تحديد فترة عمله بدقة (الفترة، الشهر، الأسبوع) لمنعه في نفس الأسبوع فقط
-                    if (pickedM) { 
-                        pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w})); 
-                        globalUsedElectroMales.push(...pickedM); 
-                        weekList.push(...pickedM); 
-                    }
-                    if (pickedF) { 
-                        pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w})); 
-                        globalUsedElectroFemales.push(...pickedF); 
-                        weekList.push(...pickedF); 
-                    }
+                        // تسجيل الطلاب في السجل مع تحديد الفترة، الشهر، والأسبوع بدقة
+                        if (pickedM) { 
+                            pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
+                            globalUsedElectroMales.push(...pickedM); 
+                            weekList.push(...pickedM); 
+                        }
+                        if (pickedF) { 
+                            pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
+                            globalUsedElectroFemales.push(...pickedF); 
+                            weekList.push(...pickedF); 
+                        }
                         
                         html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
                     }
@@ -495,22 +476,20 @@ async function generateDistribution() {
                     let monthIdx = Math.floor(daysAssigned / 30) % mandatoryMonths;
                     let monthAssig = gInfo.schedules[monthIdx];
                     
-                    // حساب نحن في أي شهر (1-based) وأي أسبوع (1 إلى 4) تقريباً بناءً على التاريخ
+                    // حساب نحن في أي شهر وأسبوع فعلي لفلترة التعارض بدقة
                     let currentAbsoluteMonth = Math.floor(daysAssigned / 30) + 1; 
                     let currentWeek = Math.ceil(allocatorCurrentDate.getDate() / 7);
-                    if (currentWeek > 4) currentWeek = 4; // الحد الأقصى 4 أسابيع للشهر
+                    if (currentWeek > 4) currentWeek = 4;
 
-                    // دالة مساعدة للتحقق إذا كان الطالب لديه علاج كهربائي في نفس الأسبوع الحالي
                     const hasElectroConflict = (studentName) => {
                         return window.electroRegistry.some(record => 
                             record.name === studentName && 
-                            record.p === p && // نفس الفترة
-                            record.m === currentAbsoluteMonth && // نفس الشهر
-                            record.w === currentWeek // نفس الأسبوع
+                            record.p === p && 
+                            record.m === currentAbsoluteMonth && 
+                            record.w === currentWeek 
                         );
                     };
 
-                    // تصفية الطلاب: استبعاد الحكيم، والمستخدمين مسبقاً في الـ Allocator، ومن لديهم تعارض Electrotherapy في نفس الأسبوع فقط!
                     let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
                     let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s)));
                     
@@ -518,15 +497,8 @@ async function generateDistribution() {
                     let pickedF = availF.slice(0, allocFemaleReq);
                     let picked = [...pickedM, ...pickedF];
                     
-                    // --- Smart Validation Block 3: Allocator Deficit ---
                     if (picked.length < (allocMaleReq + allocFemaleReq)) {
-                        let msg = `⚠️ [تحليل النظام: عجز في الـ Allocator]\n\n`;
-                        msg += `🔍 الحالة:\nالطلاب المتاحين في دورة (${dateString}) غير كافين لتغطية المطلوب.\n\n`;
-                        msg += `💡 السبب:\nمعظم الطلاب محجوزين في "قسم الحكيم" أو مسجلين كـ "علاج كهربائي"، أو تم استهلاكهم بالكامل في دورات الـ Allocator السابقة.\n\n`;
-                        msg += `✅ الحلول:\n1. تقليل العدد المطلوب للـ Allocator.\n2. زيادة أيام تجديد القائمة لتقليل استهلاك الطلاب السريع.\n\n`;
-                        msg += `❓ هل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`;
-                        
-                        if (confirm(msg)) { break; } else { return; }
+                        if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { break; } else { return; }
                     }
 
                     usedAllocators.push(...picked);
@@ -539,7 +511,6 @@ async function generateDistribution() {
                     daysAssigned += allocCycle;
                 }
                 
-                // Smart Output: الفائض المتبقي
                 let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
                 if (unassigned.length > 0) {
                     html += `<tr style="background:#fef2f2;"><td colspan="3"><strong style="color:red;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم استهلاكهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
@@ -557,7 +528,7 @@ async function generateDistribution() {
 }
 
 // ============================================================================
-// دوال الطباعة والتصدير (Print & Export) - لا يوجد تعديلات هنا
+// دوال الطباعة والتصدير (Print & Export)
 // ============================================================================
 function printAdminTable() {
     if (window.lastDistributionData.length === 0) { alert("يرجى إنشاء التوزيع أولاً!"); return; }
