@@ -13,7 +13,7 @@ const departmentsList = [
 const arabicMonths = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 // ============================================================================
-// مستمعات الأحداث (Event Listeners) بحماية ضد الأخطاء
+// مستمعات الأحداث (Event Listeners)
 // ============================================================================
 document.getElementById('maleNames')?.addEventListener('input', updateCounts);
 document.getElementById('femaleNames')?.addEventListener('input', updateCounts);
@@ -38,13 +38,17 @@ function buildDepartmentsTable() {
     if (!tbody) return;
     tbody.innerHTML = '';
     departmentsList.forEach((dept, index) => {
-        let maxInput = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max" data-index="${index}" placeholder="لا حد أقصى">`;
+        // إنشاء خانتين منفصلتين للحد الأقصى (ذكور وإناث)
+        let maxInputM = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max-m" data-index="${index}" placeholder="لا حد أقصى">`;
+        let maxInputF = dept === 'قسم (الحكيم)' ? '<span style="color:gray;">مستثنى</span>' : `<input type="number" class="dept-electro-max-f" data-index="${index}" placeholder="لا حد أقصى">`;
+        
         tbody.innerHTML += `
             <tr>
                 <td>${dept}</td>
                 <td><input type="number" class="dept-male" data-index="${index}" value="0" min="0"></td>
                 <td><input type="number" class="dept-female" data-index="${index}" value="0" min="0"></td>
-                <td>${maxInput}</td>
+                <td>${maxInputM}</td>
+                <td>${maxInputF}</td>
             </tr>
         `;
     });
@@ -298,7 +302,7 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
 }
 
 // ============================================================================
-// الخوارزمية الرئيسية (Main Generation) مغلفة بنظام حماية (Try/Catch)
+// الخوارزمية الرئيسية (Main Generation)
 // ============================================================================
 async function generateDistribution() {
     try {
@@ -325,11 +329,19 @@ async function generateDistribution() {
 
         let baseMaleCaps = Array.from(document.querySelectorAll('.dept-male')).map(inp => parseInt(inp.value) || 0);
         let baseFemaleCaps = Array.from(document.querySelectorAll('.dept-female')).map(inp => parseInt(inp.value) || 0);
-        let electroMaxCaps = Array.from(document.querySelectorAll('.dept-electro-max')).map(inp => {
+        
+        // قراءة المصفوفات المنفصلة للحد الأقصى للعلاج الكهربائي
+        let electroMaxCapsM = Array.from(document.querySelectorAll('.dept-electro-max-m')).map(inp => {
             if(inp.value === "") return -1; 
             return parseInt(inp.value);
         });
-        if (electroMaxCaps.length > 6) electroMaxCaps[6] = 0; 
+        if (electroMaxCapsM.length > 6) electroMaxCapsM[6] = 0; 
+
+        let electroMaxCapsF = Array.from(document.querySelectorAll('.dept-electro-max-f')).map(inp => {
+            if(inp.value === "") return -1; 
+            return parseInt(inp.value);
+        });
+        if (electroMaxCapsF.length > 6) electroMaxCapsF[6] = 0; 
 
         let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
         let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
@@ -439,8 +451,9 @@ async function generateDistribution() {
                         let monthAssig = gInfo.schedules[m-1];
 
                         for (let w = 1; w <= 4; w++) {
-                            let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCaps);
-                            let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCaps);
+                            // استخدام المصفوفات المنفصلة للذكور والإناث
+                            let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCapsM);
+                            let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCapsF);
                             
                             if ((!pickedM && electroMaleReq > 0) || (!pickedF && electroFemaleReq > 0)) {
                                 alert(`⚠️ [تحليل النظام: فشل تسكين العلاج الكهربائي]\nالقيود التي حددتها للأقسام منعت تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالعملية توقفت. يرجى تعديل الإعدادات.`);
@@ -561,7 +574,6 @@ async function generateDistribution() {
                     
                     let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
                     
-                    // --- توزيع الفائض العشوائي ---
                     if (allocDistributeSurplus && unassigned.length > 0) {
                         let activeCycles = allocCyclesData.filter(c => !c.isOff);
                         let surplusPool = shuffle([...unassigned]);
@@ -569,7 +581,6 @@ async function generateDistribution() {
                         for (let student of surplusPool) {
                             let availableCycles = shuffle(activeCycles.filter(c => !c.hasExtra));
                             for (let cycle of availableCycles) {
-                                // التأكد من عدم وجود تعارض مع العلاج الكهربائي في أسبوع هذه الدورة
                                 const conflict = window.electroRegistry.some(record => 
                                     record.name === student && 
                                     record.p === p && 
@@ -587,7 +598,6 @@ async function generateDistribution() {
                         }
                     }
 
-                    // --- بناء الـ HTML ---
                     allocCyclesData.forEach(cycle => {
                         if (cycle.isOff) {
                             html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
@@ -623,7 +633,7 @@ async function generateDistribution() {
 }
 
 // ============================================================================
-// دوال الطباعة والتصدير (Print & Export) - مدمجة بحماية (Optional Chaining)
+// دوال الطباعة والتصدير (Print & Export) 
 // ============================================================================
 function printAdminTable() {
     if (window.lastDistributionData.length === 0) { alert("يرجى إنشاء التوزيع أولاً!"); return; }
