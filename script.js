@@ -4,11 +4,13 @@
 window.globalDistributionPlan = { males: [], females: [] };
 window.lastDistributionData = [];
 window.publicHolidays = [];
-window.electroRegistry = []; 
+window.electroRegistry = []; // السجل العام للعلاج الكهربائي
 
+// تم تعديل الترتيب هنا بناءً على طلبك
 const departmentsList = [
+    'قسم العظام', 'قسم الأعصاب', 'قسم الأطفال', 
     'قسم الباطنة', 'قسم الجراحة والحروق', 'قسم صحة المرأة', 
-    'قسم العظام', 'قسم الأعصاب', 'قسم الأطفال', 'قسم (الحكيم)'
+    'قسم (الحكيم)'
 ];
 const arabicMonths = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
@@ -183,7 +185,7 @@ function distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, targetMales, 
     let currentFemaleSum = finalFemaleCaps.reduce((a, b) => a + b, 0);
     let maleSurplus = targetMales - currentMaleSum;
     let femaleSurplus = targetFemales - currentFemaleSum;
-    let eligibleIndices = [0, 1, 2, 3, 4, 5]; 
+    let eligibleIndices = [0, 1, 2, 3, 4, 5]; // الحكيم مستثنى برقم الإندكس
     
     if (maleSurplus > 0 || femaleSurplus > 0) {
         let safeCounter = 0;
@@ -296,7 +298,7 @@ function pickElectroStudents(pool, requiredCount, usedGlobal, monthAssignments, 
         deptCounts[randDept]++;
     }
 
-    return picked; // إرجاع القائمة حتى وإن كان بها عجز
+    return picked; 
 }
 
 // ============================================================================
@@ -440,8 +442,8 @@ async function generateDistribution() {
                 html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
                 
                 for (let gInfo of monthlySchedules) {
-                  html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
-                   
+                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
+                    
                     for (let m = 1; m <= mandatoryMonths; m++) {
                         let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
                         html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
@@ -451,7 +453,7 @@ async function generateDistribution() {
                             let pickedM = pickElectroStudents(gInfo.m, electroMaleReq, globalUsedElectroMales, monthAssig, electroMaxCapsM);
                             let pickedF = pickElectroStudents(gInfo.f, electroFemaleReq, globalUsedElectroFemales, monthAssig, electroMaxCapsF);
                             
-                            if (pickedM.length < electroMaleReq || pickedF.length < electroFemaleReq) {
+                            if ((electroMaleReq > 0 && pickedM.length < electroMaleReq) || (electroFemaleReq > 0 && pickedF.length < electroFemaleReq)) {
                                 let msg = `⚠️ [تحليل النظام: عجز في العلاج الكهربائي]\nلم يتم تجميع العدد المطلوب في الدورة (${w}) لشهر (${mName}).\nالقيود التي حددتها تمنع إكمال العدد، أو تم استنفاذ الطلاب المتاحين.\n\nهل تريد الاستمرار وترك العجز كما هو في هذا الأسبوع؟`;
                                 if (!confirm(msg)) {
                                     return;
@@ -459,12 +461,12 @@ async function generateDistribution() {
                             }
                             
                             let weekList = [];
-                            if (pickedM.length > 0) { 
+                            if (pickedM && pickedM.length > 0) { 
                                 pickedM.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
                                 globalUsedElectroMales.push(...pickedM); 
                                 weekList.push(...pickedM); 
                             }
-                            if (pickedF.length > 0) { 
+                            if (pickedF && pickedF.length > 0) { 
                                 pickedF.forEach(s => window.electroRegistry.push({name: s, p: p, m: m, w: w}));
                                 globalUsedElectroFemales.push(...pickedF); 
                                 weekList.push(...pickedF); 
@@ -475,7 +477,6 @@ async function generateDistribution() {
                         html += `</tr>`;
                     }
                     
-                    // طباعة فائض العلاج الكهربائي
                     let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !globalUsedElectroMales.includes(s) && !globalUsedElectroFemales.includes(s));
                     if (unassignedElectro.length > 0) {
                         html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم استهلاكهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
@@ -491,20 +492,21 @@ async function generateDistribution() {
                 
                 let allocatorCurrentDate = new Date(allocStart);
                 allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths));
+                
+                let periodEndDate = new Date(allocatorCurrentDate);
+                periodEndDate.setMonth(periodEndDate.getMonth() + mandatoryMonths);
 
                 for (let gInfo of monthlySchedules) {
                     html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
                     
                     let usedAllocators = [];
-                    let daysAssigned = 0;
-                    let maxDays = mandatoryMonths * 30; 
                     let safety = 0;
                     
                     let allocCyclesData = [];
                     let uncoveredDays = [];
                     let deficitOccurred = false;
 
-                    while (daysAssigned < maxDays && safety < 100) {
+                    while (allocatorCurrentDate < periodEndDate && safety < 365) {
                         safety++;
                         let dateString = allocatorCurrentDate.toISOString().split('T')[0];
                         let isWeekend = allocWeekends.includes(allocatorCurrentDate.getDay());
@@ -516,31 +518,44 @@ async function generateDistribution() {
                             continue;
                         }
 
-                        // تصحيح حساب تاريخ نهاية الدورة بتخطي العطلات بداخل الدورة
                         let endDate = new Date(allocatorCurrentDate);
                         let addedDays = 1;
+                        
                         while(addedDays < allocCycle) {
-                            endDate.setDate(endDate.getDate() + 1);
+                            let nextDay = new Date(endDate);
+                            nextDay.setDate(nextDay.getDate() + 1);
+
+                            if (nextDay >= periodEndDate) {
+                                break; 
+                            }
+
+                            endDate = nextDay;
                             let endIsWknd = allocWeekends.includes(endDate.getDay());
                             let endHol = window.publicHolidays.find(h => h.date === endDate.toISOString().split('T')[0]);
                             if(!endIsWknd && !endHol) {
                                 addedDays++;
                             }
                         }
+                        
                         let endDateString = endDate.toISOString().split('T')[0];
 
                         if (deficitOccurred) {
                             uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
                             allocatorCurrentDate = new Date(endDate);
                             allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
-                            daysAssigned += allocCycle;
                             continue;
                         }
 
-                        let monthIdx = Math.floor(daysAssigned / 30) % mandatoryMonths;
+                        let periodStartDate = new Date(allocStart);
+                        periodStartDate.setMonth(periodStartDate.getMonth() + (p * mandatoryMonths));
+                        let diffTime = Math.abs(allocatorCurrentDate - periodStartDate);
+                        let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        let monthIdx = Math.floor(diffDays / 30);
+                        if(monthIdx >= mandatoryMonths) monthIdx = mandatoryMonths - 1;
+                        
                         let monthAssig = gInfo.schedules[monthIdx];
                         
-                        let currentAbsoluteMonth = Math.floor(daysAssigned / 30) + 1; 
+                        let currentAbsoluteMonth = monthIdx + 1; 
                         let currentWeek = Math.ceil(allocatorCurrentDate.getDate() / 7);
                         if (currentWeek > 4) currentWeek = 4;
 
@@ -566,7 +581,6 @@ async function generateDistribution() {
                                 uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
                                 allocatorCurrentDate = new Date(endDate);
                                 allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
-                                daysAssigned += allocCycle;
                                 continue;
                             } else { return; }
                         }
@@ -581,12 +595,11 @@ async function generateDistribution() {
                             hasExtra: false,
                             absMonth: currentAbsoluteMonth,
                             week: currentWeek,
-                            cycleDays: allocCycle
+                            cycleDays: addedDays
                         });
                         
                         allocatorCurrentDate = new Date(endDate);
                         allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
-                        daysAssigned += allocCycle;
                     }
                     
                     let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
