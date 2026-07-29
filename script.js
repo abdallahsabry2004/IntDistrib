@@ -269,7 +269,7 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
     let bestSim = null;
     let lowestPenalty = Infinity;
 
-    for (let sim = 0; sim < 500; sim++) {
+    for (let sim = 0; sim < 1000; sim++) {
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -536,7 +536,7 @@ async function generateDistribution() {
 
                 if (simResult.penalty > 0) {
                     let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 500 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ 1000 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
