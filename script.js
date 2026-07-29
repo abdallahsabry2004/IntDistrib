@@ -708,11 +708,19 @@ async function generateDistribution() {
                             continue;
                         }
 
+                        // التعديل الجديد للتأكد من ربط التاريخ بالشهر الفعلي (التقويم الحقيقي)
                         let periodStartDate = new Date(allocStart);
                         periodStartDate.setMonth(periodStartDate.getMonth() + (p * mandatoryMonths));
-                        let diffTime = Math.abs(allocatorCurrentDate - periodStartDate);
-                        let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        let monthIdx = Math.floor(diffDays / 30);
+                        
+                        let monthIdx = 0;
+                        for (let mStep = 1; mStep <= mandatoryMonths; mStep++) {
+                            let stepDate = new Date(periodStartDate);
+                            stepDate.setMonth(stepDate.getMonth() + mStep);
+                            if (allocatorCurrentDate < stepDate) {
+                                monthIdx = mStep - 1;
+                                break;
+                            }
+                        }
                         if(monthIdx >= mandatoryMonths) monthIdx = mandatoryMonths - 1;
                         
                         let monthAssig = gInfo.schedules[monthIdx] || {};
@@ -771,7 +779,6 @@ async function generateDistribution() {
                         let surplusPool = shuffle([...unassigned]);
                         
                         for (let student of surplusPool) {
-                            // ترتيب الدورات عشان نوزع الفائض عليهم بالتساوي
                             activeCycles.sort((a, b) => (a.extraCount || 0) - (b.extraCount || 0));
                             
                             for (let cycle of activeCycles) {
