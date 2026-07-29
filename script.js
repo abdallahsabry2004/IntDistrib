@@ -325,7 +325,7 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// دالة الترتيب الاستباقي المؤمنة بالكامل
+// دالة الترتيب الاستباقي الجديدة: اختيار الطالب صاحب الأولوية القصوى مباشرة
 function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
     if (requiredCount === 0 || !monthAssignments) return [];
     
@@ -340,52 +340,69 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         return true;
     });
 
+    // إعطاء أولوية صارمة للطلاب اللي هينزلوا حكيم في شهور تانية وخلط الباقي عشوائياً
     validAvailable.sort((a, b) => {
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
-        return scoreB - scoreA;
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+        
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return Math.random() - 0.5; // خلط لمن تساوت أولوياتهم
     });
 
     let picked = [];
     let deptCounts = {};
     departmentsList.forEach(d => deptCounts[d] = 0);
 
-    let byDept = {};
-    departmentsList.forEach(d => byDept[d] = []);
-    validAvailable.forEach(s => {
-        let d = monthAssignments[s];
-        if(d && byDept[d]) byDept[d].push(s);
-    });
-
     let attempts = 0;
     while (picked.length < requiredCount && attempts < 100) {
         attempts++;
-        let deptsWithAvailable = departmentsList.filter(d => 
-            byDept[d].length > 0 && 
-            (maxCapsArray[departmentsList.indexOf(d)] === -1 || deptCounts[d] < maxCapsArray[departmentsList.indexOf(d)])
-        );
-        
-        if (requiredCount > 1 && picked.length > 0) {
-            let lastDept = monthAssignments[picked[picked.length - 1]];
-            if (deptsWithAvailable.length > 1) {
-                deptsWithAvailable = deptsWithAvailable.filter(d => d !== lastDept || deptsWithAvailable.length === 1);
+        let pickedStudent = null;
+
+        // البحث عن أول طالب (أعلى أولوية) متاح قسمه يسمح بالسحب
+        for (let i = 0; i < validAvailable.length; i++) {
+            let s = validAvailable[i];
+            let d = monthAssignments[s];
+            let deptIdx = departmentsList.indexOf(d);
+            
+            if (maxCapsArray[deptIdx] === -1 || deptCounts[d] < maxCapsArray[deptIdx]) {
+                // محاولة تجنب سحب طالبين من نفس القسم ورا بعض مباشرة لتنويع الأقسام
+                let validDeptsRemaining = new Set(validAvailable.map(st => monthAssignments[st])).size;
+                if (requiredCount > 1 && picked.length > 0 && validDeptsRemaining > 1) {
+                    let lastDept = monthAssignments[picked[picked.length - 1]];
+                    if (d === lastDept) continue; // تخطي مؤقت
+                }
+
+                pickedStudent = s;
+                validAvailable.splice(i, 1);
+                break;
             }
         }
 
-        if (deptsWithAvailable.length === 0) break;
+        // لو متخطيين طلاب بسبب شرط التنوع، نرجع ناخد منهم لو مضطرين
+        if (!pickedStudent && validAvailable.length > 0) {
+            for (let i = 0; i < validAvailable.length; i++) {
+                let s = validAvailable[i];
+                let d = monthAssignments[s];
+                let deptIdx = departmentsList.indexOf(d);
+                if (maxCapsArray[deptIdx] === -1 || deptCounts[d] < maxCapsArray[deptIdx]) {
+                    pickedStudent = s;
+                    validAvailable.splice(i, 1);
+                    break;
+                }
+            }
+        }
 
-        let randDept = deptsWithAvailable[0]; 
-        let student = byDept[randDept].shift(); 
-        if (student) {
-            picked.push(student);
-            deptCounts[randDept]++;
+        if (pickedStudent) {
+            picked.push(pickedStudent);
+            deptCounts[monthAssignments[pickedStudent]]++;
+        } else {
+            break; // لا يوجد طلاب متاحين تنطبق عليهم الشروط
         }
     }
 
     return picked; 
 }
 
-// دالة التعويض المؤمنة
 function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
     if (requiredCount === 0 || !monthAssignments) return [];
     
@@ -737,7 +754,7 @@ async function generateDistribution() {
                             startDate: dateString,
                             endDate: endDateString,
                             picked: picked,
-                            hasExtra: false,
+                            extraCount: 0,
                             absMonth: currentAbsoluteMonth,
                             week: currentWeek,
                             cycleDays: addedDays
@@ -754,8 +771,10 @@ async function generateDistribution() {
                         let surplusPool = shuffle([...unassigned]);
                         
                         for (let student of surplusPool) {
-                            let availableCycles = shuffle(activeCycles.filter(c => !c.hasExtra));
-                            for (let cycle of availableCycles) {
+                            // ترتيب الدورات عشان نوزع الفائض عليهم بالتساوي
+                            activeCycles.sort((a, b) => (a.extraCount || 0) - (b.extraCount || 0));
+                            
+                            for (let cycle of activeCycles) {
                                 const conflict = window.electroRegistry.some(record => 
                                     record.name === student && 
                                     record.p === p && 
@@ -764,7 +783,7 @@ async function generateDistribution() {
                                 );
                                 if (!conflict) {
                                     cycle.picked.push(student);
-                                    cycle.hasExtra = true;
+                                    cycle.extraCount = (cycle.extraCount || 0) + 1;
                                     unassigned = unassigned.filter(s => s !== student);
                                     usedAllocators.push(student);
                                     break;
@@ -777,7 +796,8 @@ async function generateDistribution() {
                         if (cycle.isOff) {
                             html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
                         } else {
-                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${cycle.picked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${cycle.hasExtra ? '<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(طالب إضافي من الفائض)</span>' : ''}</td></tr>`;
+                            let extraText = cycle.extraCount > 0 ? `<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(+${cycle.extraCount} طالب إضافي من الفائض)</span>` : '';
+                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${cycle.picked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
                         }
                     });
 
