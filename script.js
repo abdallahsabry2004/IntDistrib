@@ -622,7 +622,12 @@ async function generateDistribution() {
                                     window.electroRegistry.push({name: s, p: p, m: m, w: w});
                                     let isRep = periodUsedElectroMales.includes(s);
                                     if (!isRep) periodUsedElectroMales.push(s);
-                                    weekList.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                                    
+                                    // الإضافة الجديدة: إرفاق اسم القسم للذكور
+                                    let deptName = monthAssig[s] || 'غير محدد';
+                                    let displayName = `${s} (${deptName})`;
+                                    
+                                    weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
                                 });
                             }
                             if (pickedF && pickedF.length > 0) { 
@@ -630,7 +635,12 @@ async function generateDistribution() {
                                     window.electroRegistry.push({name: s, p: p, m: m, w: w});
                                     let isRep = periodUsedElectroFemales.includes(s);
                                     if (!isRep) periodUsedElectroFemales.push(s);
-                                    weekList.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                                    
+                                    // الإضافة الجديدة: إرفاق اسم القسم للإناث
+                                    let deptName = monthAssig[s] || 'غير محدد';
+                                    let displayName = `${s} (${deptName})`;
+                                    
+                                    weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
                                 });
                             }
                             
@@ -804,7 +814,16 @@ async function generateDistribution() {
                             html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
                         } else {
                             let extraText = cycle.extraCount > 0 ? `<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(+${cycle.extraCount} طالب إضافي من الفائض)</span>` : '';
-                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${cycle.picked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
+                            
+                            // الإضافة الجديدة: جلب اسم القسم من الشهر الخاص بالدورة الحالية
+                            let cycleMonthAssig = gInfo.schedules[cycle.absMonth - 1] || {};
+                            let formattedPicked = cycle.picked.map(s => {
+                                let deptName = cycleMonthAssig[s] || 'غير محدد';
+                                return `${s} (${deptName})`;
+                            });
+                            
+                            // دمج الأسماء المنسقة في الجدول
+                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${formattedPicked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
                         }
                     });
 
