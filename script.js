@@ -269,8 +269,8 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
     let bestSim = null;
     let lowestPenalty = Infinity;
 
-    // نقوم بـ 100 محاكاة للوصول لأفضل توزيعة للأقسام
-    for (let sim = 0; sim < 100; sim++) {
+    // نقوم بـ 1000 محاكاة للوصول لأفضل توزيعة للأقسام
+    for (let sim = 0; sim < 1000; sim++) {
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -377,7 +377,7 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     departmentsList.forEach(d => deptCounts[d] = 0);
 
     let attempts = 0;
-    while (picked.length < requiredCount && attempts < 100) {
+    while (picked.length < requiredCount && attempts < 1000) {
         attempts++;
         let pickedStudent = null;
 
