@@ -5,6 +5,8 @@ window.globalDistributionPlan = { males: [], females: [] };
 window.lastDistributionData = [];
 window.publicHolidays = [];
 window.electroRegistry = []; 
+window.allocRegistry = [];
+window.globalDutyCounts = {};
 
 const departmentsList = [
     'قسم العظام', 'قسم الأعصاب', 'قسم الأطفال', 
@@ -269,7 +271,7 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
     let bestSim = null;
     let lowestPenalty = Infinity;
 
-    for (let sim = 0; sim < 1000; sim++) {
+    for (let sim = 0; sim < 2000; sim++) {
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -325,8 +327,8 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-// دالة الترتيب الاستباقي الجديدة: اختيار الطالب صاحب الأولوية القصوى مباشرة
-function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
+// دالة الترتيب الاستباقي الذكية جداً: تحل مشاكل العجز وتوزع الضغط بعدالة
+function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx, weekDates) {
     if (requiredCount === 0 || !monthAssignments) return [];
     
     let available = pool.filter(s => !usedGlobal.includes(s));
@@ -340,13 +342,19 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         return true;
     });
 
-    // إعطاء أولوية صارمة للطلاب اللي هينزلوا حكيم في شهور تانية وخلط الباقي عشوائياً
+    // ترتيب ذكي بناءً على الأولوية العظمى (طلاب الحكيم) ثم التوزيع العادل (Duty Count)
     validAvailable.sort((a, b) => {
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+        let hakeemCountA = allSchedules.filter((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)').length;
+        let hakeemCountB = allSchedules.filter((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)').length;
         
-        if (scoreB !== scoreA) return scoreB - scoreA;
-        return Math.random() - 0.5; // خلط لمن تساوت أولوياتهم
+        if (hakeemCountA !== hakeemCountB) return hakeemCountB - hakeemCountA; // الأولوية للأعلى
+        
+        let dutyA = window.globalDutyCounts[a] || 0;
+        let dutyB = window.globalDutyCounts[b] || 0;
+        
+        if (dutyA !== dutyB) return dutyA - dutyB; // الأولوية لمن عمل أقل
+        
+        return Math.random() - 0.5; // التساوي
     });
 
     let picked = [];
@@ -358,18 +366,16 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         attempts++;
         let pickedStudent = null;
 
-        // البحث عن أول طالب (أعلى أولوية) متاح قسمه يسمح بالسحب
         for (let i = 0; i < validAvailable.length; i++) {
             let s = validAvailable[i];
             let d = monthAssignments[s];
             let deptIdx = departmentsList.indexOf(d);
             
             if (maxCapsArray[deptIdx] === -1 || deptCounts[d] < maxCapsArray[deptIdx]) {
-                // محاولة تجنب سحب طالبين من نفس القسم ورا بعض مباشرة لتنويع الأقسام
                 let validDeptsRemaining = new Set(validAvailable.map(st => monthAssignments[st])).size;
                 if (requiredCount > 1 && picked.length > 0 && validDeptsRemaining > 1) {
                     let lastDept = monthAssignments[picked[picked.length - 1]];
-                    if (d === lastDept) continue; // تخطي مؤقت
+                    if (d === lastDept) continue; 
                 }
 
                 pickedStudent = s;
@@ -378,7 +384,6 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
             }
         }
 
-        // لو متخطيين طلاب بسبب شرط التنوع، نرجع ناخد منهم لو مضطرين
         if (!pickedStudent && validAvailable.length > 0) {
             for (let i = 0; i < validAvailable.length; i++) {
                 let s = validAvailable[i];
@@ -396,14 +401,14 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
             picked.push(pickedStudent);
             deptCounts[monthAssignments[pickedStudent]]++;
         } else {
-            break; // لا يوجد طلاب متاحين تنطبق عليهم الشروط
+            break; 
         }
     }
 
     return picked; 
 }
 
-function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
+function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW, weekDates) {
     if (requiredCount === 0 || !monthAssignments) return [];
     
     let availableForRepeat = usedGlobal.filter(s => pool.includes(s)); 
@@ -424,6 +429,8 @@ function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, 
 async function generateDistribution() {
     try {
         window.electroRegistry = []; 
+        window.allocRegistry = [];
+        window.globalDutyCounts = {}; // إعادة التصفير
         window.lastDistributionData = [];
         let html = '';
 
@@ -536,7 +543,7 @@ async function generateDistribution() {
 
                 if (simResult.penalty > 0) {
                     let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 1000 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ 2000 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
@@ -595,9 +602,23 @@ async function generateDistribution() {
                         html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                         let monthAssig = gInfo.schedules[m-1] || {};
 
+                        // تحديد تواريخ الأسابيع الأربعة بشكل دقيق لمنع تداخل الـ Allocator
+                        let baseD = allocStart ? new Date(allocStart) : new Date();
+                        baseD.setMonth(baseD.getMonth() + (p * mandatoryMonths) + (m - 1));
+                        let y = baseD.getFullYear();
+                        let mon = baseD.getMonth();
+                        
+                        let weeksDates = [
+                            { start: new Date(y, mon, 1), end: new Date(y, mon, 7) },
+                            { start: new Date(y, mon, 8), end: new Date(y, mon, 14) },
+                            { start: new Date(y, mon, 15), end: new Date(y, mon, 21) },
+                            { start: new Date(y, mon, 22), end: new Date(y, mon + 1, 0) } // لنهاية الشهر
+                        ];
+
                         for (let w = 1; w <= 4; w++) {
-                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1);
-                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1);
+                            let currWeekDate = weeksDates[w - 1];
+                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1, currWeekDate);
+                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1, currWeekDate);
                             
                             let missingM = electroMaleReq - pickedM.length;
                             let missingF = electroFemaleReq - pickedF.length;
@@ -606,11 +627,11 @@ async function generateDistribution() {
                                 let msg = `⚠️ [عجز في العلاج الكهربائي - الأسبوع ${w} لشهر ${mName}]\n\nالعدد المتاح للذكور: ${pickedM.length}/${electroMaleReq} | للإناث: ${pickedF.length}/${electroFemaleReq}\n\nهل توافق على تكرار طلاب (نزلوا علاج كهربائي في أسابيع سابقة) لسد العجز وتلوينهم بالأحمر؟`;
                                 if (confirm(msg)) {
                                     if (missingM > 0) {
-                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w);
+                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w, currWeekDate);
                                         pickedM.push(...extraM);
                                     }
                                     if (missingF > 0) {
-                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w);
+                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w, currWeekDate);
                                         pickedF.push(...extraF);
                                     }
                                 }
@@ -619,27 +640,25 @@ async function generateDistribution() {
                             let weekList = [];
                             if (pickedM && pickedM.length > 0) { 
                                 pickedM.forEach(s => {
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
                                     let isRep = periodUsedElectroMales.includes(s);
                                     if (!isRep) periodUsedElectroMales.push(s);
                                     
-                                    // الإضافة الجديدة: إرفاق اسم القسم للذكور
                                     let deptName = monthAssig[s] || 'غير محدد';
                                     let displayName = `${s} (${deptName})`;
-                                    
                                     weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
                                 });
                             }
                             if (pickedF && pickedF.length > 0) { 
                                 pickedF.forEach(s => {
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
                                     let isRep = periodUsedElectroFemales.includes(s);
                                     if (!isRep) periodUsedElectroFemales.push(s);
                                     
-                                    // الإضافة الجديدة: إرفاق اسم القسم للإناث
                                     let deptName = monthAssig[s] || 'غير محدد';
                                     let displayName = `${s} (${deptName})`;
-                                    
                                     weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
                                 });
                             }
@@ -718,7 +737,7 @@ async function generateDistribution() {
                             continue;
                         }
 
-                        // التعديل الجديد للتأكد من ربط التاريخ بالشهر الفعلي (التقويم الحقيقي)
+                        // إيجاد الشهر الصحيح للـ Allocator بناءً على التقويم
                         let periodStartDate = new Date(allocStart);
                         periodStartDate.setMonth(periodStartDate.getMonth() + (p * mandatoryMonths));
                         
@@ -734,23 +753,40 @@ async function generateDistribution() {
                         if(monthIdx >= mandatoryMonths) monthIdx = mandatoryMonths - 1;
                         
                         let monthAssig = gInfo.schedules[monthIdx] || {};
-                        
                         let currentAbsoluteMonth = monthIdx + 1; 
-                        let currentWeek = Math.ceil(allocatorCurrentDate.getDate() / 7);
-                        if (currentWeek > 4) currentWeek = 4;
 
-                        const hasElectroConflict = (studentName, checkAbsMonth, checkWeek) => {
-                            return window.electroRegistry.some(record => 
-                                record.name === studentName && 
-                                record.p === p && 
-                                record.m === checkAbsMonth && 
-                                record.w === checkWeek 
-                            );
+                        // دالة فحص التداخل الدقيق بالتواريخ
+                        const hasElectroConflict = (studentName, allocStartStr, allocEndStr) => {
+                            let alStart = new Date(allocStartStr);
+                            let alEnd = new Date(allocEndStr);
+                            return window.electroRegistry.some(record => {
+                                if (record.name !== studentName) return false;
+                                let elStart = new Date(record.startDate);
+                                let elEnd = new Date(record.endDate);
+                                // التداخل يحدث إذا كانت البداية قبل أو تساوي النهاية والنهاية بعد أو تساوي البداية
+                                return (alStart <= elEnd && alEnd >= elStart);
+                            });
                         };
 
-                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
-                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, currentAbsoluteMonth, currentWeek)));
+                        let availM = gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, dateString, endDateString));
+                        let availF = gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, dateString, endDateString));
                         
+                        // الترتيب الذكي للـ Allocator زي العلاج الكهربائي
+                        const smartSortAlloc = (a, b) => {
+                            let hA = gInfo.schedules.filter((sched, idx) => idx !== monthIdx && sched && sched[a] === 'قسم (الحكيم)').length;
+                            let hB = gInfo.schedules.filter((sched, idx) => idx !== monthIdx && sched && sched[b] === 'قسم (الحكيم)').length;
+                            if (hA !== hB) return hB - hA; 
+                            
+                            let dA = window.globalDutyCounts[a] || 0;
+                            let dB = window.globalDutyCounts[b] || 0;
+                            if (dA !== dB) return dA - dB;
+                            
+                            return Math.random() - 0.5;
+                        };
+                        
+                        availM.sort(smartSortAlloc);
+                        availF.sort(smartSortAlloc);
+
                         let pickedM = availM.slice(0, allocMaleReq);
                         let pickedF = availF.slice(0, allocFemaleReq);
                         let picked = [...pickedM, ...pickedF];
@@ -765,7 +801,11 @@ async function generateDistribution() {
                             } else { return; }
                         }
 
-                        usedAllocators.push(...picked);
+                        picked.forEach(s => {
+                            window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
+                            usedAllocators.push(s);
+                            window.allocRegistry.push({name: s, startDate: dateString, endDate: endDateString});
+                        });
                         
                         allocCyclesData.push({
                             isOff: false,
@@ -774,7 +814,6 @@ async function generateDistribution() {
                             picked: picked,
                             extraCount: 0,
                             absMonth: currentAbsoluteMonth,
-                            week: currentWeek,
                             cycleDays: addedDays
                         });
                         
@@ -789,20 +828,27 @@ async function generateDistribution() {
                         let surplusPool = shuffle([...unassigned]);
                         
                         for (let student of surplusPool) {
+                            // التوزيع المتساوي للفائض
                             activeCycles.sort((a, b) => (a.extraCount || 0) - (b.extraCount || 0));
                             
                             for (let cycle of activeCycles) {
-                                const conflict = window.electroRegistry.some(record => 
-                                    record.name === student && 
-                                    record.p === p && 
-                                    record.m === cycle.absMonth && 
-                                    record.w === cycle.week 
-                                );
+                                // فحص التداخل بالتواريخ الدقيقة
+                                const alStart = new Date(cycle.startDate);
+                                const alEnd = new Date(cycle.endDate);
+                                
+                                const conflict = window.electroRegistry.some(record => {
+                                    if(record.name !== student) return false;
+                                    let elStart = new Date(record.startDate);
+                                    let elEnd = new Date(record.endDate);
+                                    return (alStart <= elEnd && alEnd >= elStart);
+                                });
+                                
                                 if (!conflict) {
                                     cycle.picked.push(student);
                                     cycle.extraCount = (cycle.extraCount || 0) + 1;
                                     unassigned = unassigned.filter(s => s !== student);
                                     usedAllocators.push(student);
+                                    window.globalDutyCounts[student] = (window.globalDutyCounts[student] || 0) + 1;
                                     break;
                                 }
                             }
@@ -813,16 +859,15 @@ async function generateDistribution() {
                         if (cycle.isOff) {
                             html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
                         } else {
+                            // كتابة عدد الطلاب المضافين من الفائض
                             let extraText = cycle.extraCount > 0 ? `<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(+${cycle.extraCount} طالب إضافي من الفائض)</span>` : '';
                             
-                            // الإضافة الجديدة: جلب اسم القسم من الشهر الخاص بالدورة الحالية
                             let cycleMonthAssig = gInfo.schedules[cycle.absMonth - 1] || {};
                             let formattedPicked = cycle.picked.map(s => {
                                 let deptName = cycleMonthAssig[s] || 'غير محدد';
                                 return `${s} (${deptName})`;
                             });
                             
-                            // دمج الأسماء المنسقة في الجدول
                             html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${formattedPicked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
                         }
                     });
