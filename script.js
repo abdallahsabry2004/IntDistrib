@@ -23,7 +23,7 @@ function createLoader() {
         const loaderHtml = `<div id="ai-loader" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; flex-direction:column; justify-content:center; align-items:center; font-family: 'Cairo', sans-serif; direction: rtl;">
             <div style="border: 8px solid #f3f3f3; border-top: 8px solid #1e3a8a; border-radius: 50%; width: 70px; height: 70px; animation: spin 1.5s linear infinite;"></div>
             <h2 style="color:#1e3a8a; margin-top:25px;">جاري حساب التوزيع الأمثل للطلاب...</h2>
-            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة حتى 1,000,000 مسار لاختيار الأفضل وتجنب التكرار.</p>
+            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة 1,000,000 مسار لاختيار الأفضل وتجنب التكرار.</p>
             <p id="sim-progress" style="color:#b45309; font-size:1.2em; font-weight:bold; margin-top:10px;"></p>
             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
         </div>`;
@@ -235,7 +235,7 @@ function updatePeriodSummary() {
                 validatePeriodTotals();
             });
         });
-        validatePeriodTotals(); // الفحص المبدئي
+        validatePeriodTotals(); 
     }
 }
 
@@ -350,16 +350,16 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-// دالة المحاكاة المحدثة لتصل إلى 1,000,000 محاولة مع العمل غير المتزامن (Async)
 async function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
     let bestSim = null;
     let lowestPenalty = Infinity;
     let pElem = document.getElementById('sim-progress');
+    const TOTAL_SIMULATIONS = 1000000;
 
-    for (let sim = 0; sim < 1000000; sim++) {
-        // إراحة المتصفح وتحديث العداد كل 10 آلاف دورة لتجنب التجمد
+    for (let sim = 0; sim < TOTAL_SIMULATIONS; sim++) {
+        // تحديث العداد كل 10,000 محاولة لتفادي تجمد المتصفح
         if (sim % 10000 === 0) {
-            if(pElem) pElem.innerText = `تم فحص وتجربة ${sim.toLocaleString()} مسار رياضي...`;
+            if(pElem) pElem.innerText = `تم فحص وتجربة ${(sim).toLocaleString()} مسار رياضي...`;
             await new Promise(r => setTimeout(r, 0));
         }
 
@@ -403,12 +403,10 @@ async function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemal
             bestSim = schedules;
         }
         
-        // الخروج المبكر إذا تم إيجاد مسار مثالي بدون أي خطأ
-        if (lowestPenalty === 0) {
-            if(pElem) pElem.innerText = `تم إيجاد المسار المثالي بعد ${sim.toLocaleString()} محاولة!`;
-            break; 
-        }
+        // إزالة شرط الإيقاف المبكر (Early Exit) لضمان إكمال المليون محاولة واختيار المسار الأمثل فعلياً
     }
+    
+    if(pElem) pElem.innerText = `اكتملت المليون محاولة بنجاح!`;
     return { schedules: bestSim, penalty: lowestPenalty };
 }
 
@@ -636,7 +634,6 @@ async function generateDistribution() {
             for (let group of periodGroups) {
                 if (fatalErrorOccurred) break;
 
-                // استدعاء دالة المحاكاة بطريقة غير متزامنة (await)
                 let simResult = await simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
                 
                 if (!simResult.schedules) {
@@ -648,7 +645,7 @@ async function generateDistribution() {
                 if (simResult.penalty > 0) {
                     if (loader) loader.style.display = 'none';
                     let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ مليون محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ 1,000,000 محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
@@ -781,7 +778,7 @@ async function generateDistribution() {
                     
                     let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !periodUsedElectroMales.includes(s) && !periodUsedElectroFemales.includes(s));
                     if (unassignedElectro.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="5"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small>لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="5" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
                     }
                     
                     html += `</tbody></table></div>`;
@@ -893,7 +890,6 @@ async function generateDistribution() {
                         let pickedM = availM.slice(0, allocMaleReq);
                         let pickedF = availF.slice(0, allocFemaleReq);
                         
-                        // الإضافة الجديدة: سد العجز المتقاطع (Cross-Gender Deficit Fill)
                         let missingM = allocMaleReq - pickedM.length;
                         let missingF = allocFemaleReq - pickedF.length;
                         let crossFilledNames = [];
@@ -988,7 +984,6 @@ async function generateDistribution() {
                             let formattedPicked = cycle.picked.map(s => {
                                 let deptName = cycleMonthAssig[s] || 'غير محدد';
                                 let displayName = `${s} (${deptName})`;
-                                // الإضافة الجديدة: تمييز الطالب المستخدم لسد العجز
                                 if (cycle.crossFilled && cycle.crossFilled.includes(s)) {
                                     return `<span style="color: #b45309; font-weight: bold;">${displayName}</span>`;
                                 }
@@ -1004,7 +999,7 @@ async function generateDistribution() {
                     }
 
                     if (unassigned.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="3"><strong style="color:#b45309;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small>لم يتم توزيعهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
+                        html += `<tr style="background:#fffbeb;"><td colspan="3" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
                     }
 
                     html += `</tbody></table></div>`;
