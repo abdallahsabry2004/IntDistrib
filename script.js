@@ -622,7 +622,7 @@ async function runFullPipelineSimulation(config) {
 
                 if (missingM > 0 || missingF > 0) {
                     penalty += (missingM + missingF) * 1000; // عقوبة شديدة لعجز غير قابل للحل
-                    simMessages.push(`عجز في الـ Allocator بدورة (${cycle.startDate}) غير كافين حتى بعد استخدام الجنس الآخر.`);
+                    simMessages.push(`عجز في الـ Allocator بدورة (${cycle.startDate}) غير كافين.`);
                 }
 
                 let picked = [...pickedM, ...pickedF];
