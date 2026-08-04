@@ -23,7 +23,8 @@ function createLoader() {
         const loaderHtml = `<div id="ai-loader" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; flex-direction:column; justify-content:center; align-items:center; font-family: 'Cairo', sans-serif; direction: rtl;">
             <div style="border: 8px solid #f3f3f3; border-top: 8px solid #1e3a8a; border-radius: 50%; width: 70px; height: 70px; animation: spin 1.5s linear infinite;"></div>
             <h2 style="color:#1e3a8a; margin-top:25px;">جاري حساب التوزيع الأمثل للطلاب...</h2>
-            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px;">يُرجى الانتظار، تتم الآن محاكاة مليون مسار لاختيار الأفضل وتجنب التكرار.</p>
+            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة حتى 1,000,000 مسار لاختيار الأفضل وتجنب التكرار.</p>
+            <p id="sim-progress" style="color:#b45309; font-size:1.2em; font-weight:bold; margin-top:10px;"></p>
             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
         </div>`;
         document.body.insertAdjacentHTML('beforeend', loaderHtml);
@@ -33,19 +34,34 @@ function createLoader() {
 // ============================================================================
 // مستمعات الأحداث (Event Listeners)
 // ============================================================================
-document.getElementById('maleNames')?.addEventListener('input', updateCounts);
-document.getElementById('femaleNames')?.addEventListener('input', updateCounts);
-document.getElementById('mandatoryMonths')?.addEventListener('change', updatePeriodSummary);
-document.getElementById('workMode')?.addEventListener('change', updatePeriodSummary);
+document.addEventListener('DOMContentLoaded', () => {
+    buildDepartmentsTable();
+    document.getElementById('maleNames')?.addEventListener('input', updateCounts);
+    document.getElementById('femaleNames')?.addEventListener('input', updateCounts);
+    document.getElementById('mandatoryMonths')?.addEventListener('change', updatePeriodSummary);
+    document.getElementById('workMode')?.addEventListener('change', updatePeriodSummary);
 
-document.getElementById('allocCycle')?.addEventListener('input', updateAllocatorSuggestion);
-document.getElementById('allocMale')?.addEventListener('input', updateAllocatorSuggestion);
-document.getElementById('allocFemale')?.addEventListener('input', updateAllocatorSuggestion);
-document.getElementById('allocWeekend')?.addEventListener('change', updateAllocatorSuggestion);
-document.getElementById('enableAllocator')?.addEventListener('change', function() {
-    const settingsBox = document.getElementById('allocatorSettings');
-    if (settingsBox) settingsBox.style.display = this.checked ? 'block' : 'none';
-    updateAllocatorSuggestion();
+    document.getElementById('allocCycle')?.addEventListener('input', updateAllocatorSuggestion);
+    document.getElementById('allocMale')?.addEventListener('input', updateAllocatorSuggestion);
+    document.getElementById('allocFemale')?.addEventListener('input', updateAllocatorSuggestion);
+    document.getElementById('allocWeekend')?.addEventListener('change', updateAllocatorSuggestion);
+    document.getElementById('enableAllocator')?.addEventListener('change', function() {
+        const settingsBox = document.getElementById('allocatorSettings');
+        if (settingsBox) settingsBox.style.display = this.checked ? 'block' : 'none';
+        updateAllocatorSuggestion();
+    });
+
+    const allocSurplusDiv = document.getElementById('allocDistributeSurplus')?.parentElement?.parentElement;
+    if (allocSurplusDiv && !document.getElementById('allocFillDeficitCross')) {
+        allocSurplusDiv.insertAdjacentHTML('afterend', `
+            <div class="input-group" style="grid-column: 1 / -1; margin-top: 10px;">
+                <label style="display:inline-block; font-weight: bold; color: #b45309;">
+                    <input type="checkbox" id="allocFillDeficitCross"> 
+                    سد العجز في الدورات باستخدام طلاب من الجنس الآخر (إن وُجد فائض)
+                </label>
+            </div>
+        `);
+    }
 });
 
 // ============================================================================
@@ -134,6 +150,35 @@ function updateAllocatorSuggestion() {
     suggestionBox.style.display = 'block';
 }
 
+function validatePeriodTotals() {
+    const malesVal = document.getElementById('maleNames')?.value || '';
+    const femalesVal = document.getElementById('femaleNames')?.value || '';
+    const totalMales = malesVal.split('\n').map(n => n.trim()).filter(n => n !== '').length;
+    const totalFemales = femalesVal.split('\n').map(n => n.trim()).filter(n => n !== '').length;
+
+    let currentM = 0, currentF = 0;
+    document.querySelectorAll('.edit-period-m').forEach(inp => currentM += (parseInt(inp.value) || 0));
+    document.querySelectorAll('.edit-period-f').forEach(inp => currentF += (parseInt(inp.value) || 0));
+
+    let diffM = currentM - totalMales;
+    let diffF = currentF - totalFemales;
+
+    let msgContainer = document.getElementById('periodValidationMsg');
+    if (!msgContainer) return;
+
+    let msgHTML = '';
+    if (diffM === 0 && diffF === 0) {
+        msgHTML = '<span style="color: #16a34a;">✅ الأعداد موزعة على الفترات بشكل مطابق لإجمالي الطلاب.</span>';
+    } else {
+        msgHTML = '<span style="color: #dc2626;">⚠️ تنبيه: </span>';
+        if (diffM > 0) msgHTML += `<span style="color: #dc2626;"> زيادة (${diffM}) ذكور. </span>`;
+        if (diffM < 0) msgHTML += `<span style="color: #b45309;"> نقص (${Math.abs(diffM)}) ذكور. </span>`;
+        if (diffF > 0) msgHTML += `<span style="color: #dc2626;"> زيادة (${diffF}) إناث. </span>`;
+        if (diffF < 0) msgHTML += `<span style="color: #b45309;"> نقص (${Math.abs(diffF)}) إناث. </span>`;
+    }
+    msgContainer.innerHTML = msgHTML;
+}
+
 function updatePeriodSummary() {
     const mandatoryMonthsElem = document.getElementById('mandatoryMonths');
     if (!mandatoryMonthsElem) return;
@@ -157,18 +202,41 @@ function updatePeriodSummary() {
     }
 
     let tableHtml = `<table class="data-table mini-table">
-                        <thead><tr><th>الفترة</th><th>ذكور (بكل شهر)</th><th>إناث (بكل شهر)</th></tr></thead><tbody>`;
+                        <thead><tr><th>الفترة</th><th>ذكور (بكل فترة)</th><th>إناث (بكل فترة)</th></tr></thead><tbody>`;
     for (let p = 1; p <= periodsCount; p++) {
         let pMales = periodMaleCounts[p - 1];
         let pFemales = periodFemaleCounts[p - 1];
         window.globalDistributionPlan.males.push(pMales);
         window.globalDistributionPlan.females.push(pFemales);
-        tableHtml += `<tr><td>الفترة ${p}</td><td>${pMales}</td><td>${pFemales}</td></tr>`;
+        tableHtml += `<tr>
+            <td>الفترة ${p}</td>
+            <td><input type="number" class="edit-period-m" data-index="${p-1}" value="${pMales}" min="0" style="width:100%; text-align:center; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"></td>
+            <td><input type="number" class="edit-period-f" data-index="${p-1}" value="${pFemales}" min="0" style="width:100%; text-align:center; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"></td>
+        </tr>`;
     }
     tableHtml += `</tbody></table>`;
+    tableHtml += `<div id="periodValidationMsg" style="margin-top: 10px; font-size: 14px; text-align: center; font-weight: bold; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;"></div>`;
     
     let detailedTable = document.getElementById('detailedPeriodTable');
-    if (detailedTable) detailedTable.innerHTML = (totalMales > 0 || totalFemales > 0) ? tableHtml : '';
+    if (detailedTable) {
+        detailedTable.innerHTML = (totalMales > 0 || totalFemales > 0) ? tableHtml : '';
+        
+        document.querySelectorAll('.edit-period-m').forEach(inp => {
+            inp.addEventListener('input', (e) => {
+                let idx = parseInt(e.target.getAttribute('data-index'));
+                window.globalDistributionPlan.males[idx] = parseInt(e.target.value) || 0;
+                validatePeriodTotals();
+            });
+        });
+        document.querySelectorAll('.edit-period-f').forEach(inp => {
+            inp.addEventListener('input', (e) => {
+                let idx = parseInt(e.target.getAttribute('data-index'));
+                window.globalDistributionPlan.females[idx] = parseInt(e.target.value) || 0;
+                validatePeriodTotals();
+            });
+        });
+        validatePeriodTotals(); // الفحص المبدئي
+    }
 }
 
 // ============================================================================
@@ -282,11 +350,19 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
+// دالة المحاكاة المحدثة لتصل إلى 1,000,000 محاولة مع العمل غير المتزامن (Async)
+async function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
     let bestSim = null;
     let lowestPenalty = Infinity;
+    let pElem = document.getElementById('sim-progress');
 
     for (let sim = 0; sim < 1000000; sim++) {
+        // إراحة المتصفح وتحديث العداد كل 10 آلاف دورة لتجنب التجمد
+        if (sim % 10000 === 0) {
+            if(pElem) pElem.innerText = `تم فحص وتجربة ${sim.toLocaleString()} مسار رياضي...`;
+            await new Promise(r => setTimeout(r, 0));
+        }
+
         let currentHistory = {};
         groupM.concat(groupF).forEach(s => currentHistory[s] = []);
         let schedules = [];
@@ -326,7 +402,12 @@ function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps,
             lowestPenalty = penalty;
             bestSim = schedules;
         }
-        if (lowestPenalty === 0) break; 
+        
+        // الخروج المبكر إذا تم إيجاد مسار مثالي بدون أي خطأ
+        if (lowestPenalty === 0) {
+            if(pElem) pElem.innerText = `تم إيجاد المسار المثالي بعد ${sim.toLocaleString()} محاولة!`;
+            break; 
+        }
     }
     return { schedules: bestSim, penalty: lowestPenalty };
 }
@@ -357,9 +438,12 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     });
 
     validAvailable.sort((a, b) => {
-        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
-        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
+        let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
         
+        scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
+        scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+
         if (scoreB !== scoreA) return scoreB - scoreA;
         return Math.random() - 0.5; 
     });
@@ -434,7 +518,7 @@ function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, 
 // الخوارزمية الرئيسية (Main Generation)
 // ============================================================================
 async function generateDistribution() {
-    createLoader(); // حقن شاشة التحميل في الصفحة إن لم تكن موجودة
+    createLoader();
     let loader = document.getElementById('ai-loader');
 
     try {
@@ -448,7 +532,6 @@ async function generateDistribution() {
             return; 
         }
 
-        // إظهار شاشة التحميل مع إعطاء مساحة للمتصفح ليقوم بالرسم قبل المعالجة
         if (loader) loader.style.display = 'flex';
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -481,15 +564,16 @@ async function generateDistribution() {
 
         let sumMaleCaps = baseMaleCaps.reduce((a, b) => a + b, 0);
         let sumFemaleCaps = baseFemaleCaps.reduce((a, b) => a + b, 0);
-        let cohortMinMales = Math.floor(males.length / numPeriods);
-        let cohortMinFemales = Math.floor(females.length / numPeriods);
         
+        let periodsMalesCounts = window.globalDistributionPlan.males.length > 0 ? window.globalDistributionPlan.males : Array(numPeriods).fill(Math.floor(males.length / numPeriods));
+        let periodsFemalesCounts = window.globalDistributionPlan.females.length > 0 ? window.globalDistributionPlan.females : Array(numPeriods).fill(Math.floor(females.length / numPeriods));
+
         let requiredMalesCheck = is3Days ? sumMaleCaps * 2 : sumMaleCaps;
         let requiredFemalesCheck = is3Days ? sumFemaleCaps * 2 : sumFemaleCaps;
 
-        if (requiredMalesCheck > cohortMinMales || requiredFemalesCheck > cohortMinFemales) {
+        if (requiredMalesCheck > Math.max(...periodsMalesCounts) || requiredFemalesCheck > Math.max(...periodsFemalesCounts)) {
             if (loader) loader.style.display = 'none';
-            let msg = `⚠️ [تحليل النظام: عجز في سعة الأقسام]\n\nالأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في الفترة.\n❓ هل تريد إجبار النظام على الإكمال وتقليل الأعداد عشوائياً لسد العجز؟`;
+            let msg = `⚠️ [تحليل النظام: عجز في سعة الأقسام]\n\nالأعداد المطلوبة للأقسام تفوق عدد الطلاب المتاحين في بعض الفترات.\n❓ هل تريد إجبار النظام على الإكمال وتقليل الأعداد عشوائياً لسد العجز؟`;
             if (!confirm(msg)) return;
             if (loader) loader.style.display = 'flex';
             await new Promise(r => setTimeout(r, 50));
@@ -506,8 +590,8 @@ async function generateDistribution() {
         let mIdx = 0, fIdx = 0;
         
         for (let i = 0; i < numPeriods; i++) {
-            let pMalesCount = window.globalDistributionPlan.males[i] || Math.floor(males.length / numPeriods);
-            let pFemalesCount = window.globalDistributionPlan.females[i] || Math.floor(females.length / numPeriods);
+            let pMalesCount = periodsMalesCounts[i];
+            let pFemalesCount = periodsFemalesCounts[i];
             malePeriods.push(shuffledMales.slice(mIdx, mIdx + pMalesCount));
             femalePeriods.push(shuffledFemales.slice(fIdx, fIdx + pFemalesCount));
             mIdx += pMalesCount; fIdx += pFemalesCount;
@@ -523,6 +607,7 @@ async function generateDistribution() {
         let allocStartDateVal = document.getElementById('allocStartDate')?.value;
         let allocStart = allocStartDateVal ? new Date(allocStartDateVal) : null;
         let allocDistributeSurplus = document.getElementById('allocDistributeSurplus')?.checked || false;
+        let allocFillDeficitCross = document.getElementById('allocFillDeficitCross')?.checked || false;
 
         for (let p = 0; p < numPeriods; p++) {
             let cohortMales = malePeriods[p], cohortFemales = femalePeriods[p];
@@ -551,7 +636,8 @@ async function generateDistribution() {
             for (let group of periodGroups) {
                 if (fatalErrorOccurred) break;
 
-                let simResult = simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
+                // استدعاء دالة المحاكاة بطريقة غير متزامنة (await)
+                let simResult = await simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
                 
                 if (!simResult.schedules) {
                     if (loader) loader.style.display = 'none';
@@ -562,7 +648,7 @@ async function generateDistribution() {
                 if (simResult.penalty > 0) {
                     if (loader) loader.style.display = 'none';
                     let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 1000000 محاكاة عشوائية للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ مليون محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
@@ -602,7 +688,7 @@ async function generateDistribution() {
                                 cellStudents.push(displayStr);
                             });
                         }
-                        html += `<td>${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                        html += `<td contenteditable="true">${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
                     });
                     groupSchedules.push(monthAssignments);
                     html += `</tr>`;
@@ -625,9 +711,22 @@ async function generateDistribution() {
                         html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
                         let monthAssig = gInfo.schedules[m-1] || {};
 
+                        let baseD = allocStart ? new Date(allocStart) : new Date();
+                        baseD.setMonth(baseD.getMonth() + (p * mandatoryMonths) + (m - 1));
+                        let y = baseD.getFullYear();
+                        let mon = baseD.getMonth();
+                        
+                        let weeksDates = [
+                            { start: new Date(y, mon, 1), end: new Date(y, mon, 7) },
+                            { start: new Date(y, mon, 8), end: new Date(y, mon, 14) },
+                            { start: new Date(y, mon, 15), end: new Date(y, mon, 21) },
+                            { start: new Date(y, mon, 22), end: new Date(y, mon + 1, 0) } 
+                        ];
+
                         for (let w = 1; w <= 4; w++) {
-                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1);
-                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1);
+                            let currWeekDate = weeksDates[w - 1];
+                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1, currWeekDate);
+                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1, currWeekDate);
                             
                             let missingM = electroMaleReq - pickedM.length;
                             let missingF = electroFemaleReq - pickedF.length;
@@ -637,11 +736,11 @@ async function generateDistribution() {
                                 let msg = `⚠️ [عجز في العلاج الكهربائي - الأسبوع ${w} لشهر ${mName}]\n\nالعدد المتاح للذكور: ${pickedM.length}/${electroMaleReq} | للإناث: ${pickedF.length}/${electroFemaleReq}\n\nهل توافق على تكرار طلاب (نزلوا علاج كهربائي في أسابيع سابقة) لسد العجز وتلوينهم بالأحمر؟`;
                                 if (confirm(msg)) {
                                     if (missingM > 0) {
-                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w);
+                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w, currWeekDate);
                                         pickedM.push(...extraM);
                                     }
                                     if (missingF > 0) {
-                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w);
+                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w, currWeekDate);
                                         pickedF.push(...extraF);
                                     }
                                 }
@@ -652,7 +751,8 @@ async function generateDistribution() {
                             let weekList = [];
                             if (pickedM && pickedM.length > 0) { 
                                 pickedM.forEach(s => {
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
                                     let isRep = periodUsedElectroMales.includes(s);
                                     if (!isRep) periodUsedElectroMales.push(s);
                                     
@@ -663,7 +763,8 @@ async function generateDistribution() {
                             }
                             if (pickedF && pickedF.length > 0) { 
                                 pickedF.forEach(s => {
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w});
+                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
+                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
                                     let isRep = periodUsedElectroFemales.includes(s);
                                     if (!isRep) periodUsedElectroFemales.push(s);
                                     
@@ -673,7 +774,7 @@ async function generateDistribution() {
                                 });
                             }
                             
-                            html += `<td>${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                            html += `<td contenteditable="true">${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
                         }
                         html += `</tr>`;
                     }
@@ -726,16 +827,12 @@ async function generateDistribution() {
                             let nextDay = new Date(endDate);
                             nextDay.setDate(nextDay.getDate() + 1);
 
-                            if (nextDay >= periodEndDate) {
-                                break; 
-                            }
+                            if (nextDay >= periodEndDate) { break; }
 
                             endDate = nextDay;
                             let endIsWknd = allocWeekends.includes(endDate.getDay());
                             let endHol = window.publicHolidays.find(h => h.date === endDate.toISOString().split('T')[0]);
-                            if(!endIsWknd && !endHol) {
-                                addedDays++;
-                            }
+                            if(!endIsWknd && !endHol) { addedDays++; }
                         }
                         
                         let endDateString = endDate.toISOString().split('T')[0];
@@ -747,7 +844,6 @@ async function generateDistribution() {
                             continue;
                         }
 
-                        // التعديل الجديد للتأكد من ربط التاريخ بالشهر الفعلي (التقويم الحقيقي)
                         let periodStartDate = new Date(allocStart);
                         periodStartDate.setMonth(periodStartDate.getMonth() + (p * mandatoryMonths));
                         
@@ -772,7 +868,6 @@ async function generateDistribution() {
                                 if (record.name !== studentName) return false;
                                 let elStart = new Date(record.startDate);
                                 let elEnd = new Date(record.endDate);
-                                // التداخل يحدث إذا كانت البداية قبل أو تساوي النهاية والنهاية بعد أو تساوي البداية
                                 return (alStart <= elEnd && alEnd >= elStart);
                             });
                         };
@@ -797,11 +892,30 @@ async function generateDistribution() {
 
                         let pickedM = availM.slice(0, allocMaleReq);
                         let pickedF = availF.slice(0, allocFemaleReq);
+                        
+                        // الإضافة الجديدة: سد العجز المتقاطع (Cross-Gender Deficit Fill)
+                        let missingM = allocMaleReq - pickedM.length;
+                        let missingF = allocFemaleReq - pickedF.length;
+                        let crossFilledNames = [];
+
+                        if (allocFillDeficitCross) {
+                            if (missingM > 0 && availF.length > allocFemaleReq) {
+                                let extraF = availF.slice(allocFemaleReq, allocFemaleReq + missingM);
+                                pickedF.push(...extraF);
+                                crossFilledNames.push(...extraF);
+                            }
+                            if (missingF > 0 && availM.length > allocMaleReq) {
+                                let extraM = availM.slice(allocMaleReq, allocMaleReq + missingF);
+                                pickedM.push(...extraM);
+                                crossFilledNames.push(...extraM);
+                            }
+                        }
+
                         let picked = [...pickedM, ...pickedF];
                         
                         if (picked.length < (allocMaleReq + allocFemaleReq)) {
                             if (loader) loader.style.display = 'none';
-                            if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { 
+                            if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين حتى بعد استخدام الجنس الآخر.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { 
                                 deficitOccurred = true;
                                 uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
                                 allocatorCurrentDate = new Date(endDate);
@@ -822,6 +936,7 @@ async function generateDistribution() {
                             startDate: dateString,
                             endDate: endDateString,
                             picked: picked,
+                            crossFilled: crossFilledNames,
                             extraCount: 0,
                             absMonth: currentAbsoluteMonth,
                             cycleDays: addedDays
@@ -872,10 +987,15 @@ async function generateDistribution() {
                             let cycleMonthAssig = gInfo.schedules[cycle.absMonth - 1] || {};
                             let formattedPicked = cycle.picked.map(s => {
                                 let deptName = cycleMonthAssig[s] || 'غير محدد';
-                                return `${s} (${deptName})`;
+                                let displayName = `${s} (${deptName})`;
+                                // الإضافة الجديدة: تمييز الطالب المستخدم لسد العجز
+                                if (cycle.crossFilled && cycle.crossFilled.includes(s)) {
+                                    return `<span style="color: #b45309; font-weight: bold;">${displayName}</span>`;
+                                }
+                                return displayName;
                             });
                             
-                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td><ol class="student-list"><li>${formattedPicked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
+                            html += `<tr><td>من ${cycle.startDate} <br>إلى ${cycle.endDate}</td><td contenteditable="true"><ol class="student-list"><li>${formattedPicked.join('</li><li>')}</li></ol></td><td>دورة ${cycle.cycleDays} أيام${extraText}</td></tr>`;
                         }
                     });
 
@@ -903,11 +1023,8 @@ async function generateDistribution() {
         alert("⚠️ حدث خطأ أثناء التوزيع:\n" + error.message + "\n\nيُرجى التأكد من تحديث ملف الـ HTML ليطابق آخر التعديلات.");
         console.error(error);
     } finally {
-        // إخفاء شاشة التحميل في كل الحالات بمجرد الانتهاء من المعالجة
         let loader = document.getElementById('ai-loader');
         if (loader) loader.style.display = 'none';
-        
-        // التمرير السلس إلى النتائج
         document.getElementById('printArea')?.scrollIntoView({ behavior: 'smooth' });
     }
 }
