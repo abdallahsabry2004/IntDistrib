@@ -22,8 +22,8 @@ function createLoader() {
     if (!document.getElementById('ai-loader')) {
         const loaderHtml = `<div id="ai-loader" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; flex-direction:column; justify-content:center; align-items:center; font-family: 'Cairo', sans-serif; direction: rtl;">
             <div style="border: 8px solid #f3f3f3; border-top: 8px solid #1e3a8a; border-radius: 50%; width: 70px; height: 70px; animation: spin 1.5s linear infinite;"></div>
-            <h2 style="color:#1e3a8a; margin-top:25px;">جاري حساب التوزيع الأمثل للطلاب...</h2>
-            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة 10000 مسار لاختيار الأفضل وتجنب التكرار.</p>
+            <h2 style="color:#1e3a8a; margin-top:25px;">جاري حساب التوزيع الشامل الأمثل للطلاب...</h2>
+            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار، تتم الآن محاكاة 10,000 مسار متكامل (أقسام + كهربائي + Allocator) لاختيار الأفضل.</p>
             <p id="sim-progress" style="color:#b45309; font-size:1.2em; font-weight:bold; margin-top:10px;"></p>
             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
         </div>`;
@@ -350,66 +350,6 @@ function assignStudentsToDepartmentsSmart(students, targetCaps, currentHistory, 
     return { success: !failed, assignments: assignments, history: newHistory, repeatedStudents: repeatedStudents };
 }
 
-async function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemaleCaps, mandatoryMonths) {
-    let bestSim = null;
-    let lowestPenalty = Infinity;
-    let pElem = document.getElementById('sim-progress');
-    const TOTAL_SIMULATIONS = 10000;
-
-    for (let sim = 0; sim < TOTAL_SIMULATIONS; sim++) {
-        // تحديث العداد كل 10,000 محاولة لتفادي تجمد المتصفح
-        if (sim % 10000 === 0) {
-            if(pElem) pElem.innerText = `تم فحص وتجربة ${(sim).toLocaleString()} مسار رياضي...`;
-            await new Promise(r => setTimeout(r, 0));
-        }
-
-        let currentHistory = {};
-        groupM.concat(groupF).forEach(s => currentHistory[s] = []);
-        let schedules = [];
-        let penalty = 0;
-        let simFailed = false;
-
-        for (let m = 1; m <= mandatoryMonths; m++) {
-            let adjustedCaps = distributeDepartmentSurplus(baseMaleCaps, baseFemaleCaps, groupM.length, groupF.length);
-            
-            let maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, false);
-            if (!maleAssign.success) maleAssign = assignStudentsToDepartmentsSmart(groupM, adjustedCaps.males, currentHistory, true);
-            
-            let femaleAssign = assignStudentsToDepartmentsSmart(groupF, adjustedCaps.females, maleAssign.history, false);
-            if (!femaleAssign.success) femaleAssign = assignStudentsToDepartmentsSmart(groupF, adjustedCaps.females, maleAssign.history, true);
-
-            if (!maleAssign.success || !femaleAssign.success) {
-                simFailed = true; break; 
-            }
-
-            currentHistory = femaleAssign.history;
-            penalty += maleAssign.repeatedStudents.length + femaleAssign.repeatedStudents.length;
-            
-            let monthAssignments = {};
-            departmentsList.forEach(dept => {
-                if (maleAssign.assignments[dept]) maleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
-                if (femaleAssign.assignments[dept]) femaleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
-            });
-
-            schedules.push({
-                maleAssign: maleAssign,
-                femaleAssign: femaleAssign,
-                monthAssignments: monthAssignments
-            });
-        }
-
-        if (!simFailed && penalty < lowestPenalty) {
-            lowestPenalty = penalty;
-            bestSim = schedules;
-        }
-        
-        // إزالة شرط الإيقاف المبكر (Early Exit) لضمان إكمال المليون محاولة واختيار المسار الأمثل فعلياً
-    }
-    
-    if(pElem) pElem.innerText = `اكتملت المليون محاولة بنجاح!`;
-    return { schedules: bestSim, penalty: lowestPenalty };
-}
-
 async function fetchPublicHolidays(year) {
     try {
         let res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/EG`);
@@ -421,7 +361,7 @@ async function fetchPublicHolidays(year) {
     }
 }
 
-function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx) {
+function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssignments, maxCapsArray, allSchedules, currentMonthIdx, weekDates) {
     if (requiredCount === 0 || !monthAssignments) return [];
     
     let available = pool.filter(s => !usedGlobal.includes(s));
@@ -439,10 +379,11 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
         let scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[a] === 'قسم (الحكيم)') ? 1 : 0;
         let scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched.monthAssignments && sched.monthAssignments[b] === 'قسم (الحكيم)') ? 1 : 0;
         
-        scoreA = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[a] === 'قسم (الحكيم)') ? 1 : 0;
-        scoreB = allSchedules.some((sched, idx) => idx !== currentMonthIdx && sched && sched[b] === 'قسم (الحكيم)') ? 1 : 0;
+        let dutyA = window.globalDutyCounts[a] || 0;
+        let dutyB = window.globalDutyCounts[b] || 0;
 
         if (scoreB !== scoreA) return scoreB - scoreA;
+        if (dutyA !== dutyB) return dutyA - dutyB; 
         return Math.random() - 0.5; 
     });
 
@@ -497,23 +438,258 @@ function pickElectroStudentsPriority(pool, requiredCount, usedGlobal, monthAssig
     return picked; 
 }
 
-function pickRepeatedElectro(pool, requiredCount, usedGlobal, monthAssignments, currentP, currentM, currentW) {
-    if (requiredCount === 0 || !monthAssignments) return [];
-    
-    let availableForRepeat = usedGlobal.filter(s => pool.includes(s)); 
-    let validForRepeat = availableForRepeat.filter(s => {
-        let dept = monthAssignments[s];
-        if (!dept || dept === 'قسم (الحكيم)') return false;
-        
-        let conflictThisWeek = window.electroRegistry.some(r => r.name === s && r.p === currentP && r.m === currentM && r.w === currentW);
-        return !conflictThisWeek;
-    });
+// ============================================================================
+// محرك المحاكاة الشامل (Global Pipeline Simulation Engine)
+// ============================================================================
+async function runFullPipelineSimulation(config) {
+    const TOTAL_SIMULATIONS = 10000; // 10,000 محاكاة شاملة ومستقلة تماماً
+    let bestSim = null;
+    let lowestPenalty = Infinity;
+    let pElem = document.getElementById('sim-progress');
 
-    return shuffle(validForRepeat).slice(0, requiredCount);
+    for (let sim = 0; sim < TOTAL_SIMULATIONS; sim++) {
+        if (sim % 500 === 0) {
+            if(pElem) pElem.innerText = `تم تجربة وتقييم ${(sim).toLocaleString()} مسار شامل...`;
+            await new Promise(r => setTimeout(r, 0));
+        }
+
+        let currentHistory = {};
+        config.groupM.concat(config.groupF).forEach(s => currentHistory[s] = []);
+        
+        let simSchedules = [];
+        let simElectroLog = [];
+        let simAllocLog = [];
+        
+        // سجلات محلية خاصة بكل محاولة لعدم التلويث
+        let simElectroRegistry = [];
+        let simGlobalDutyCounts = {};
+        let simPeriodUsedElectroMales = [];
+        let simPeriodUsedElectroFemales = [];
+        
+        let penalty = 0;
+        let simFailed = false;
+        let simMessages = [];
+
+        // --- 1. مرحلة الأقسام (Departments) ---
+        for (let m = 1; m <= config.mandatoryMonths; m++) {
+            let adjustedCaps = distributeDepartmentSurplus(config.baseMaleCaps, config.baseFemaleCaps, config.groupM.length, config.groupF.length);
+            
+            let maleAssign = assignStudentsToDepartmentsSmart(config.groupM, adjustedCaps.males, currentHistory, false);
+            if (!maleAssign.success) maleAssign = assignStudentsToDepartmentsSmart(config.groupM, adjustedCaps.males, currentHistory, true);
+            
+            let femaleAssign = assignStudentsToDepartmentsSmart(config.groupF, adjustedCaps.females, maleAssign.history, false);
+            if (!femaleAssign.success) femaleAssign = assignStudentsToDepartmentsSmart(config.groupF, adjustedCaps.females, maleAssign.history, true);
+
+            if (!maleAssign.success || !femaleAssign.success) {
+                simFailed = true; break; 
+            }
+
+            currentHistory = femaleAssign.history;
+            penalty += (maleAssign.repeatedStudents.length + femaleAssign.repeatedStudents.length) * 10000; // عقوبة ضخمة لتكرار الأقسام
+            
+            let monthAssignments = {};
+            departmentsList.forEach(dept => {
+                if (maleAssign.assignments[dept]) maleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
+                if (femaleAssign.assignments[dept]) femaleAssign.assignments[dept].forEach(s => monthAssignments[s] = dept);
+            });
+
+            simSchedules.push({ maleAssign, femaleAssign, monthAssignments });
+        }
+
+        if (simFailed) continue;
+
+        // --- 2. مرحلة العلاج الكهربائي (Electrotherapy) ---
+        if (config.electroMaleReq > 0 || config.electroFemaleReq > 0) {
+            for (let m = 1; m <= config.mandatoryMonths; m++) {
+                let monthAssig = simSchedules[m-1] ? simSchedules[m-1].monthAssignments : {};
+                let weeksDates = config.electroDates[m-1];
+
+                let monthElectroData = [];
+
+                for (let w = 1; w <= 4; w++) {
+                    let currWeekDate = weeksDates[w - 1];
+                    let pickedM = pickElectroStudentsPriority(config.groupM, config.electroMaleReq, simPeriodUsedElectroMales, monthAssig, config.electroMaxCapsM, simSchedules, m-1, currWeekDate);
+                    let pickedF = pickElectroStudentsPriority(config.groupF, config.electroFemaleReq, simPeriodUsedElectroFemales, monthAssig, config.electroMaxCapsF, simSchedules, m-1, currWeekDate);
+                    
+                    let missingM = config.electroMaleReq - pickedM.length;
+                    let missingF = config.electroFemaleReq - pickedF.length;
+
+                    // في المحاكاة، نستخدم طلاب مكررين لسد العجز فوراً ونحسب عقوبات
+                    if (missingM > 0) {
+                        let availForRep = simPeriodUsedElectroMales.filter(s => config.groupM.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !simElectroRegistry.some(r => r.name === s && r.m === m && r.w === w));
+                        let extraM = shuffle(availForRep).slice(0, missingM);
+                        pickedM.push(...extraM);
+                        penalty += extraM.length * 100; // عقوبة للتكرار
+                        missingM -= extraM.length;
+                        if (missingM > 0) penalty += missingM * 1000; // عقوبة لعجز مستحيل
+                    }
+
+                    if (missingF > 0) {
+                        let availForRep = simPeriodUsedElectroFemales.filter(s => config.groupF.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !simElectroRegistry.some(r => r.name === s && r.m === m && r.w === w));
+                        let extraF = shuffle(availForRep).slice(0, missingF);
+                        pickedF.push(...extraF);
+                        penalty += extraF.length * 100; 
+                        missingF -= extraF.length;
+                        if (missingF > 0) penalty += missingF * 1000; 
+                    }
+                    
+                    let weekMList = [], weekFList = [];
+                    
+                    pickedM.forEach(s => {
+                        simGlobalDutyCounts[s] = (simGlobalDutyCounts[s] || 0) + 1;
+                        simElectroRegistry.push({name: s, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
+                        let isRep = simPeriodUsedElectroMales.includes(s);
+                        if (!isRep) simPeriodUsedElectroMales.push(s);
+                        weekMList.push({name: s, isRep: isRep});
+                    });
+
+                    pickedF.forEach(s => {
+                        simGlobalDutyCounts[s] = (simGlobalDutyCounts[s] || 0) + 1;
+                        simElectroRegistry.push({name: s, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
+                        let isRep = simPeriodUsedElectroFemales.includes(s);
+                        if (!isRep) simPeriodUsedElectroFemales.push(s);
+                        weekFList.push({name: s, isRep: isRep});
+                    });
+
+                    monthElectroData.push({ pickedM: weekMList, pickedF: weekFList, missingM, missingF });
+                }
+                simElectroLog.push(monthElectroData);
+            }
+        }
+
+        // --- 3. مرحلة الـ Allocator ---
+        if (config.isAllocator && config.allocCyclesRaw) {
+            let usedAllocators = [];
+            
+            for (let i = 0; i < config.allocCyclesRaw.length; i++) {
+                let cycle = Object.assign({}, config.allocCyclesRaw[i]);
+                if (cycle.isOff) {
+                    simAllocLog.push(cycle);
+                    continue;
+                }
+
+                let monthAssig = simSchedules[cycle.monthIdx] ? simSchedules[cycle.monthIdx].monthAssignments : {};
+                
+                const hasElectroConflict = (studentName, allocStartStr, allocEndStr) => {
+                    let alStart = new Date(allocStartStr);
+                    let alEnd = new Date(allocEndStr);
+                    return simElectroRegistry.some(record => {
+                        if (record.name !== studentName) return false;
+                        let elStart = new Date(record.startDate);
+                        let elEnd = new Date(record.endDate);
+                        return (alStart <= elEnd && alEnd >= elStart);
+                    });
+                };
+
+                let availM = shuffle(config.groupM.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, cycle.startDate, cycle.endDate)));
+                let availF = shuffle(config.groupF.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, cycle.startDate, cycle.endDate)));
+                
+                const smartSortAlloc = (a, b) => {
+                    let hA = simSchedules.filter((sched, idx) => idx !== cycle.monthIdx && sched && sched.monthAssignments[a] === 'قسم (الحكيم)').length;
+                    let hB = simSchedules.filter((sched, idx) => idx !== cycle.monthIdx && sched && sched.monthAssignments[b] === 'قسم (الحكيم)').length;
+                    if (hA !== hB) return hB - hA; 
+                    let dA = simGlobalDutyCounts[a] || 0;
+                    let dB = simGlobalDutyCounts[b] || 0;
+                    if (dA !== dB) return dA - dB;
+                    return Math.random() - 0.5;
+                };
+                
+                availM.sort(smartSortAlloc);
+                availF.sort(smartSortAlloc);
+
+                let pickedM = availM.slice(0, config.allocMaleReq);
+                let pickedF = availF.slice(0, config.allocFemaleReq);
+                let missingM = config.allocMaleReq - pickedM.length;
+                let missingF = config.allocFemaleReq - pickedF.length;
+                let crossFilledNames = [];
+
+                if (config.allocFillDeficitCross) {
+                    if (missingM > 0 && availF.length > config.allocFemaleReq) {
+                        let extraF = availF.slice(config.allocFemaleReq, config.allocFemaleReq + missingM);
+                        pickedF.push(...extraF);
+                        crossFilledNames.push(...extraF);
+                        penalty += extraF.length * 10; // عقوبة خفيفة لسد العجز من الجنس الآخر
+                        missingM -= extraF.length;
+                    }
+                    if (missingF > 0 && availM.length > config.allocMaleReq) {
+                        let extraM = availM.slice(config.allocMaleReq, config.allocMaleReq + missingF);
+                        pickedM.push(...extraM);
+                        crossFilledNames.push(...extraM);
+                        penalty += extraM.length * 10; 
+                        missingF -= extraM.length;
+                    }
+                }
+
+                if (missingM > 0 || missingF > 0) {
+                    penalty += (missingM + missingF) * 1000; // عقوبة شديدة لعجز غير قابل للحل
+                    simMessages.push(`عجز في الـ Allocator بدورة (${cycle.startDate}) غير كافين حتى بعد استخدام الجنس الآخر.`);
+                }
+
+                let picked = [...pickedM, ...pickedF];
+                picked.forEach(s => {
+                    simGlobalDutyCounts[s] = (simGlobalDutyCounts[s] || 0) + 1;
+                    usedAllocators.push(s);
+                });
+
+                cycle.picked = picked;
+                cycle.crossFilled = crossFilledNames;
+                cycle.extraCount = 0;
+                simAllocLog.push(cycle);
+            }
+
+            // توزيع الفائض في الـ Allocator
+            let unassignedAlloc = [...config.groupM, ...config.groupF].filter(s => !usedAllocators.includes(s) && simSchedules[0] && simSchedules[0].monthAssignments[s] !== 'قسم (الحكيم)');
+            if (config.allocDistributeSurplus && unassignedAlloc.length > 0) {
+                let activeCycles = simAllocLog.filter(c => !c.isOff);
+                let surplusPool = shuffle([...unassignedAlloc]);
+                
+                for (let student of surplusPool) {
+                    activeCycles.sort((a, b) => (a.extraCount || 0) - (b.extraCount || 0));
+                    for (let cycle of activeCycles) {
+                        const conflict = simElectroRegistry.some(record => {
+                            if(record.name !== student) return false;
+                            return (new Date(cycle.startDate) <= new Date(record.endDate) && new Date(cycle.endDate) >= new Date(record.startDate));
+                        });
+                        
+                        if (!conflict) {
+                            cycle.picked.push(student);
+                            cycle.extraCount = (cycle.extraCount || 0) + 1;
+                            unassignedAlloc = unassignedAlloc.filter(s => s !== student);
+                            usedAllocators.push(student);
+                            simGlobalDutyCounts[student] = (simGlobalDutyCounts[student] || 0) + 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            // ربط الفائض الأخير ليتم عرضه
+            simAllocLog.unassigned = unassignedAlloc;
+        }
+
+        // --- تقييم المحاولة وحفظها إذا كانت الأفضل ---
+        if (penalty < lowestPenalty) {
+            lowestPenalty = penalty;
+            bestSim = {
+                schedules: simSchedules,
+                electroLog: simElectroLog,
+                allocLog: simAllocLog,
+                electroRegistryUpdates: simElectroRegistry,
+                dutyUpdates: simGlobalDutyCounts,
+                periodUsedElectroMales: simPeriodUsedElectroMales,
+                periodUsedElectroFemales: simPeriodUsedElectroFemales,
+                messages: simMessages
+            };
+        }
+        
+        if (lowestPenalty === 0) break; // وجد المسار المثالي التام
+    }
+
+    if(pElem) pElem.innerText = `تم الانتهاء من المعالجة الشاملة!`;
+    return { data: bestSim, penalty: lowestPenalty };
 }
 
 // ============================================================================
-// الخوارزمية الرئيسية (Main Generation)
+// الخوارزمية الرئيسية المزامنة (Main Generation Async)
 // ============================================================================
 async function generateDistribution() {
     createLoader();
@@ -607,6 +783,8 @@ async function generateDistribution() {
         let allocDistributeSurplus = document.getElementById('allocDistributeSurplus')?.checked || false;
         let allocFillDeficitCross = document.getElementById('allocFillDeficitCross')?.checked || false;
 
+        let allGlobalMessages = []; // لتجميع التنبيهات
+
         for (let p = 0; p < numPeriods; p++) {
             let cohortMales = malePeriods[p], cohortFemales = femalePeriods[p];
             window.lastDistributionData.push({ males: cohortMales, females: cohortFemales, mandatoryMonths: mandatoryMonths });
@@ -627,184 +805,31 @@ async function generateDistribution() {
                         <h3>الفترة الإجبارية ${p + 1} (${mandatoryMonths} شهر) - ${pMonthsText}</h3>`;
 
             let monthlySchedules = []; 
-            let periodUsedElectroMales = [];
-            let periodUsedElectroFemales = [];
-            let fatalErrorOccurred = false; 
 
             for (let group of periodGroups) {
-                if (fatalErrorOccurred) break;
-
-                let simResult = await simulatePeriodDepartments(group.m, group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths);
-                
-                if (!simResult.schedules) {
-                    if (loader) loader.style.display = 'none';
-                    alert(`⚠️ فشل رياضي في توزيع المجموعة: ${group.name}. السعة المتاحة أقل من عدد الدفعة. الرجاء مراجعة سعة الأقسام.`);
-                    fatalErrorOccurred = true; break;
-                }
-
-                if (simResult.penalty > 0) {
-                    if (loader) loader.style.display = 'none';
-                    let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 10000 محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
-                    msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
-                    msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
-                    if (!confirm(msg)) {
-                        fatalErrorOccurred = true; 
-                        if (loader) loader.style.display = 'flex';
-                        break;
-                    }
-                    if (loader) loader.style.display = 'flex';
-                    await new Promise(r => setTimeout(r, 50));
-                }
-
-                html += `<h4>توزيع الأقسام: ${group.name}</h4><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th>${departmentsList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
-                
-                let groupSchedules = [];
-
+                // تجهيز بيانات الـ Config للمحاكاة الشاملة
+                let electroDatesConfig = [];
                 for (let m = 1; m <= mandatoryMonths; m++) {
-                    let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
-                    html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
-                    
-                    let mData = simResult.schedules[m-1] || { maleAssign: {assignments:{}, repeatedStudents:[]}, femaleAssign: {assignments:{}, repeatedStudents:[]}, monthAssignments: {} };
-                    let monthAssignments = mData.monthAssignments;
-
-                    departmentsList.forEach(dept => {
-                        let cellStudents = [];
-                        
-                        if (mData.maleAssign.assignments[dept]) {
-                            mData.maleAssign.assignments[dept].forEach(s => {
-                                let isRepeated = mData.maleAssign.repeatedStudents.includes(s);
-                                let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
-                                cellStudents.push(displayStr);
-                            });
-                        }
-                        if (mData.femaleAssign.assignments[dept]) {
-                            mData.femaleAssign.assignments[dept].forEach(s => {
-                                let isRepeated = mData.femaleAssign.repeatedStudents.includes(s);
-                                let displayStr = isRepeated ? `<span style="color: #dc2626;">${s}</span>` : s;
-                                cellStudents.push(displayStr);
-                            });
-                        }
-                        html += `<td contenteditable="true">${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
-                    });
-                    groupSchedules.push(monthAssignments);
-                    html += `</tr>`;
+                    let baseD = allocStart ? new Date(allocStart) : new Date();
+                    baseD.setMonth(baseD.getMonth() + (p * mandatoryMonths) + (m - 1));
+                    let y = baseD.getFullYear();
+                    let mon = baseD.getMonth();
+                    electroDatesConfig.push([
+                        { start: new Date(y, mon, 1), end: new Date(y, mon, 7) },
+                        { start: new Date(y, mon, 8), end: new Date(y, mon, 14) },
+                        { start: new Date(y, mon, 15), end: new Date(y, mon, 21) },
+                        { start: new Date(y, mon, 22), end: new Date(y, mon + 1, 0) } 
+                    ]);
                 }
-                monthlySchedules.push({ groupName: group.name, schedules: groupSchedules, m: group.m, f: group.f });
-                html += `</tbody></table></div>`;
-            }
 
-            if (fatalErrorOccurred) break;
-
-            // ----------------- العلاج الكهربائي -----------------
-            if (electroMaleReq > 0 || electroFemaleReq > 0) {
-                html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
-                
-                for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
-                    
-                    for (let m = 1; m <= mandatoryMonths; m++) {
-                        let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
-                        html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
-                        let monthAssig = gInfo.schedules[m-1] || {};
-
-                        let baseD = allocStart ? new Date(allocStart) : new Date();
-                        baseD.setMonth(baseD.getMonth() + (p * mandatoryMonths) + (m - 1));
-                        let y = baseD.getFullYear();
-                        let mon = baseD.getMonth();
-                        
-                        let weeksDates = [
-                            { start: new Date(y, mon, 1), end: new Date(y, mon, 7) },
-                            { start: new Date(y, mon, 8), end: new Date(y, mon, 14) },
-                            { start: new Date(y, mon, 15), end: new Date(y, mon, 21) },
-                            { start: new Date(y, mon, 22), end: new Date(y, mon + 1, 0) } 
-                        ];
-
-                        for (let w = 1; w <= 4; w++) {
-                            let currWeekDate = weeksDates[w - 1];
-                            let pickedM = pickElectroStudentsPriority(gInfo.m, electroMaleReq, periodUsedElectroMales, monthAssig, electroMaxCapsM, gInfo.schedules, m-1, currWeekDate);
-                            let pickedF = pickElectroStudentsPriority(gInfo.f, electroFemaleReq, periodUsedElectroFemales, monthAssig, electroMaxCapsF, gInfo.schedules, m-1, currWeekDate);
-                            
-                            let missingM = electroMaleReq - pickedM.length;
-                            let missingF = electroFemaleReq - pickedF.length;
-
-                            if (missingM > 0 || missingF > 0) {
-                                if (loader) loader.style.display = 'none';
-                                let msg = `⚠️ [عجز في العلاج الكهربائي - الأسبوع ${w} لشهر ${mName}]\n\nالعدد المتاح للذكور: ${pickedM.length}/${electroMaleReq} | للإناث: ${pickedF.length}/${electroFemaleReq}\n\nهل توافق على تكرار طلاب (نزلوا علاج كهربائي في أسابيع سابقة) لسد العجز وتلوينهم بالأحمر؟`;
-                                if (confirm(msg)) {
-                                    if (missingM > 0) {
-                                        let extraM = pickRepeatedElectro(gInfo.m, missingM, periodUsedElectroMales, monthAssig, p, m, w, currWeekDate);
-                                        pickedM.push(...extraM);
-                                    }
-                                    if (missingF > 0) {
-                                        let extraF = pickRepeatedElectro(gInfo.f, missingF, periodUsedElectroFemales, monthAssig, p, m, w, currWeekDate);
-                                        pickedF.push(...extraF);
-                                    }
-                                }
-                                if (loader) loader.style.display = 'flex';
-                                await new Promise(r => setTimeout(r, 50));
-                            }
-                            
-                            let weekList = [];
-                            if (pickedM && pickedM.length > 0) { 
-                                pickedM.forEach(s => {
-                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
-                                    let isRep = periodUsedElectroMales.includes(s);
-                                    if (!isRep) periodUsedElectroMales.push(s);
-                                    
-                                    let deptName = monthAssig[s] || 'غير محدد';
-                                    let displayName = `${s} (${deptName})`;
-                                    weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
-                                });
-                            }
-                            if (pickedF && pickedF.length > 0) { 
-                                pickedF.forEach(s => {
-                                    window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
-                                    window.electroRegistry.push({name: s, p: p, m: m, w: w, startDate: currWeekDate.start, endDate: currWeekDate.end});
-                                    let isRep = periodUsedElectroFemales.includes(s);
-                                    if (!isRep) periodUsedElectroFemales.push(s);
-                                    
-                                    let deptName = monthAssig[s] || 'غير محدد';
-                                    let displayName = `${s} (${deptName})`;
-                                    weekList.push(isRep ? `<span style="color: #dc2626;">${displayName}</span>` : displayName);
-                                });
-                            }
-                            
-                            html += `<td contenteditable="true">${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
-                        }
-                        html += `</tr>`;
-                    }
-                    
-                    let unassignedElectro = [...gInfo.m, ...gInfo.f].filter(s => !periodUsedElectroMales.includes(s) && !periodUsedElectroFemales.includes(s));
-                    if (unassignedElectro.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="5" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
-                    }
-                    
-                    html += `</tbody></table></div>`;
-                }
-            }
-
-            // ----------------- جدول الـ Allocator -----------------
-            if (isAllocator && allocStart) {
-                html += `<h4 style="margin-top:20px; color:#16a34a;">توزيع مسؤولي التاريخ المرضي Allocator (الفترة ${p + 1})</h4>`;
-                
-                let allocatorCurrentDate = new Date(allocStart);
-                allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths));
-                
-                let periodEndDate = new Date(allocatorCurrentDate);
-                periodEndDate.setMonth(periodEndDate.getMonth() + mandatoryMonths);
-
-                for (let gInfo of monthlySchedules) {
-                    html += `<h5>${gInfo.groupName}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
-                    
-                    let usedAllocators = [];
+                let allocCyclesRaw = [];
+                if (isAllocator && allocStart) {
+                    let allocatorCurrentDate = new Date(allocStart);
+                    allocatorCurrentDate.setMonth(allocatorCurrentDate.getMonth() + (p * mandatoryMonths));
+                    let periodEndDate = new Date(allocatorCurrentDate);
+                    periodEndDate.setMonth(periodEndDate.getMonth() + mandatoryMonths);
                     let safety = 0;
                     
-                    let allocCyclesData = [];
-                    let uncoveredDays = [];
-                    let deficitOccurred = false;
-
                     while (allocatorCurrentDate < periodEndDate && safety < 365) {
                         safety++;
                         let dateString = allocatorCurrentDate.toISOString().split('T')[0];
@@ -812,175 +837,155 @@ async function generateDistribution() {
                         let holiday = window.publicHolidays.find(h => h.date === dateString);
                         
                         if (isWeekend || holiday) {
-                            allocCyclesData.push({ isOff: true, date: dateString, reason: holiday ? 'إجازة رسمية: ' + holiday.name : 'عطلة أسبوعية' });
+                            allocCyclesRaw.push({ isOff: true, date: dateString, reason: holiday ? 'إجازة رسمية: ' + holiday.name : 'عطلة أسبوعية' });
                             allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                             continue;
                         }
 
                         let endDate = new Date(allocatorCurrentDate);
                         let addedDays = 1;
-                        
                         while(addedDays < allocCycle) {
                             let nextDay = new Date(endDate);
                             nextDay.setDate(nextDay.getDate() + 1);
-
-                            if (nextDay >= periodEndDate) { break; }
-
+                            if (nextDay >= periodEndDate) break; 
                             endDate = nextDay;
                             let endIsWknd = allocWeekends.includes(endDate.getDay());
                             let endHol = window.publicHolidays.find(h => h.date === endDate.toISOString().split('T')[0]);
-                            if(!endIsWknd && !endHol) { addedDays++; }
+                            if(!endIsWknd && !endHol) addedDays++;
                         }
                         
-                        let endDateString = endDate.toISOString().split('T')[0];
-
-                        if (deficitOccurred) {
-                            uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
-                            allocatorCurrentDate = new Date(endDate);
-                            allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
-                            continue;
-                        }
-
                         let periodStartDate = new Date(allocStart);
                         periodStartDate.setMonth(periodStartDate.getMonth() + (p * mandatoryMonths));
-                        
                         let monthIdx = 0;
                         for (let mStep = 1; mStep <= mandatoryMonths; mStep++) {
                             let stepDate = new Date(periodStartDate);
                             stepDate.setMonth(stepDate.getMonth() + mStep);
                             if (allocatorCurrentDate < stepDate) {
-                                monthIdx = mStep - 1;
-                                break;
+                                monthIdx = mStep - 1; break;
                             }
                         }
                         if(monthIdx >= mandatoryMonths) monthIdx = mandatoryMonths - 1;
                         
-                        let monthAssig = gInfo.schedules[monthIdx] || {};
-                        let currentAbsoluteMonth = monthIdx + 1; 
-
-                        const hasElectroConflict = (studentName, allocStartStr, allocEndStr) => {
-                            let alStart = new Date(allocStartStr);
-                            let alEnd = new Date(allocEndStr);
-                            return window.electroRegistry.some(record => {
-                                if (record.name !== studentName) return false;
-                                let elStart = new Date(record.startDate);
-                                let elEnd = new Date(record.endDate);
-                                return (alStart <= elEnd && alEnd >= elStart);
-                            });
-                        };
-
-                        let availM = shuffle(gInfo.m.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, dateString, endDateString)));
-                        let availF = shuffle(gInfo.f.filter(s => !usedAllocators.includes(s) && monthAssig[s] && monthAssig[s] !== 'قسم (الحكيم)' && !hasElectroConflict(s, dateString, endDateString)));
-                        
-                        const smartSortAlloc = (a, b) => {
-                            let hA = gInfo.schedules.filter((sched, idx) => idx !== monthIdx && sched && sched[a] === 'قسم (الحكيم)').length;
-                            let hB = gInfo.schedules.filter((sched, idx) => idx !== monthIdx && sched && sched[b] === 'قسم (الحكيم)').length;
-                            if (hA !== hB) return hB - hA; 
-                            
-                            let dA = window.globalDutyCounts[a] || 0;
-                            let dB = window.globalDutyCounts[b] || 0;
-                            if (dA !== dB) return dA - dB;
-                            
-                            return Math.random() - 0.5;
-                        };
-                        
-                        availM.sort(smartSortAlloc);
-                        availF.sort(smartSortAlloc);
-
-                        let pickedM = availM.slice(0, allocMaleReq);
-                        let pickedF = availF.slice(0, allocFemaleReq);
-                        
-                        let missingM = allocMaleReq - pickedM.length;
-                        let missingF = allocFemaleReq - pickedF.length;
-                        let crossFilledNames = [];
-
-                        if (allocFillDeficitCross) {
-                            if (missingM > 0 && availF.length > allocFemaleReq) {
-                                let extraF = availF.slice(allocFemaleReq, allocFemaleReq + missingM);
-                                pickedF.push(...extraF);
-                                crossFilledNames.push(...extraF);
-                            }
-                            if (missingF > 0 && availM.length > allocMaleReq) {
-                                let extraM = availM.slice(allocMaleReq, allocMaleReq + missingF);
-                                pickedM.push(...extraM);
-                                crossFilledNames.push(...extraM);
-                            }
-                        }
-
-                        let picked = [...pickedM, ...pickedF];
-                        
-                        if (picked.length < (allocMaleReq + allocFemaleReq)) {
-                            if (loader) loader.style.display = 'none';
-                            if (confirm(`⚠️ [عجز في الـ Allocator]\nالطلاب المتاحين في دورة (${dateString}) غير كافين حتى بعد استخدام الجنس الآخر.\nهل تريد إكمال التوزيع وترك باقي الأيام فارغة؟`)) { 
-                                deficitOccurred = true;
-                                uncoveredDays.push(`من ${dateString} إلى ${endDateString}`);
-                                allocatorCurrentDate = new Date(endDate);
-                                allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
-                                if (loader) loader.style.display = 'flex';
-                                continue;
-                            } else { return; }
-                        }
-
-                        picked.forEach(s => {
-                            window.globalDutyCounts[s] = (window.globalDutyCounts[s] || 0) + 1;
-                            usedAllocators.push(s);
-                            window.allocRegistry.push({name: s, startDate: dateString, endDate: endDateString});
-                        });
-                        
-                        allocCyclesData.push({
+                        allocCyclesRaw.push({
                             isOff: false,
                             startDate: dateString,
-                            endDate: endDateString,
-                            picked: picked,
-                            crossFilled: crossFilledNames,
-                            extraCount: 0,
-                            absMonth: currentAbsoluteMonth,
+                            endDate: endDate.toISOString().split('T')[0],
+                            monthIdx: monthIdx,
                             cycleDays: addedDays
                         });
                         
                         allocatorCurrentDate = new Date(endDate);
                         allocatorCurrentDate.setDate(allocatorCurrentDate.getDate() + 1);
                     }
-                    
-                    let unassigned = [...gInfo.m, ...gInfo.f].filter(s => !usedAllocators.includes(s) && gInfo.schedules[0] && gInfo.schedules[0][s] !== 'قسم (الحكيم)');
-                    
-                    if (allocDistributeSurplus && unassigned.length > 0) {
-                        let activeCycles = allocCyclesData.filter(c => !c.isOff);
-                        let surplusPool = shuffle([...unassigned]);
-                        
-                        for (let student of surplusPool) {
-                            activeCycles.sort((a, b) => (a.extraCount || 0) - (b.extraCount || 0));
-                            
-                            for (let cycle of activeCycles) {
-                                const alStart = new Date(cycle.startDate);
-                                const alEnd = new Date(cycle.endDate);
-                                
-                                const conflict = window.electroRegistry.some(record => {
-                                    if(record.name !== student) return false;
-                                    let elStart = new Date(record.startDate);
-                                    let elEnd = new Date(record.endDate);
-                                    return (alStart <= elEnd && alEnd >= elStart);
-                                });
-                                
-                                if (!conflict) {
-                                    cycle.picked.push(student);
-                                    cycle.extraCount = (cycle.extraCount || 0) + 1;
-                                    unassigned = unassigned.filter(s => s !== student);
-                                    usedAllocators.push(student);
-                                    window.globalDutyCounts[student] = (window.globalDutyCounts[student] || 0) + 1;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                }
 
-                    allocCyclesData.forEach(cycle => {
+                let simConfig = {
+                    groupM: group.m, groupF: group.f, baseMaleCaps, baseFemaleCaps, mandatoryMonths,
+                    electroMaleReq, electroFemaleReq, electroMaxCapsM, electroMaxCapsF, electroDates: electroDatesConfig,
+                    isAllocator, allocMaleReq, allocFemaleReq, allocDistributeSurplus, allocFillDeficitCross, allocCyclesRaw
+                };
+
+                let bestResult = await runFullPipelineSimulation(simConfig);
+                let bestData = bestResult.data;
+
+                if (!bestData || !bestData.schedules) {
+                    if (loader) loader.style.display = 'none';
+                    alert(`⚠️ فشل رياضي في توزيع المجموعة: ${group.name}. السعة المتاحة أقل من عدد الدفعة.`);
+                    return;
+                }
+
+                // تجميع الرسائل التحذيرية إن وجدت لعرضها لاحقاً
+                if (bestData.messages && bestData.messages.length > 0) {
+                    allGlobalMessages.push(`في مجموعة ${group.name}: ` + bestData.messages.join(" و "));
+                }
+
+                // تحديث المتغيرات العامة بنتائج أفضل محاكاة
+                window.globalDutyCounts = Object.assign(window.globalDutyCounts, bestData.dutyUpdates);
+                bestData.electroRegistryUpdates.forEach(r => window.electroRegistry.push({...r, p: p}));
+
+                // ==================== رسم الجداول بناءً على البيانات المثالية ====================
+                
+                // 1. رسم الأقسام
+                html += `<h4>توزيع الأقسام: ${group.name}</h4><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th>${departmentsList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
+                for (let m = 1; m <= mandatoryMonths; m++) {
+                    let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
+                    html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
+                    let mData = bestData.schedules[m-1];
+                    departmentsList.forEach(dept => {
+                        let cellStudents = [];
+                        if (mData.maleAssign.assignments[dept]) {
+                            mData.maleAssign.assignments[dept].forEach(s => {
+                                let isRep = mData.maleAssign.repeatedStudents.includes(s);
+                                cellStudents.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                            });
+                        }
+                        if (mData.femaleAssign.assignments[dept]) {
+                            mData.femaleAssign.assignments[dept].forEach(s => {
+                                let isRep = mData.femaleAssign.repeatedStudents.includes(s);
+                                cellStudents.push(isRep ? `<span style="color: #dc2626;">${s}</span>` : s);
+                            });
+                        }
+                        html += `<td contenteditable="true">${cellStudents.length > 0 ? `<ol class="student-list"><li>${cellStudents.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                    });
+                    html += `</tr>`;
+                }
+                html += `</tbody></table></div>`;
+
+                // 2. رسم العلاج الكهربائي
+                if (electroMaleReq > 0 || electroFemaleReq > 0) {
+                    html += `<h4 style="margin-top:20px; color:var(--primary);">توزيع مسؤولي العلاج الكهربائي (الفترة ${p + 1})</h4>`;
+                    html += `<h5>${group.name}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>الشهر</th><th>الأسبوع الأول</th><th>الأسبوع الثاني</th><th>الأسبوع الثالث</th><th>الأسبوع الرابع</th></tr></thead><tbody>`;
+                    
+                    for (let m = 1; m <= mandatoryMonths; m++) {
+                        let mName = arabicMonths[(startMonthIdx + periodStartAbsolute + m - 1) % 12];
+                        html += `<tr><td><strong>الشهر ${m} (${mName})</strong></td>`;
+                        
+                        let monthElectroData = bestData.electroLog[m-1];
+                        let monthAssig = bestData.schedules[m-1].monthAssignments;
+
+                        for (let w = 1; w <= 4; w++) {
+                            let weekData = monthElectroData[w-1];
+                            let weekList = [];
+                            
+                            weekData.pickedM.forEach(item => {
+                                let deptName = monthAssig[item.name] || 'غير محدد';
+                                let disp = `${item.name} (${deptName})`;
+                                weekList.push(item.isRep ? `<span style="color: #dc2626;">${disp}</span>` : disp);
+                            });
+                            weekData.pickedF.forEach(item => {
+                                let deptName = monthAssig[item.name] || 'غير محدد';
+                                let disp = `${item.name} (${deptName})`;
+                                weekList.push(item.isRep ? `<span style="color: #dc2626;">${disp}</span>` : disp);
+                            });
+                            
+                            html += `<td contenteditable="true">${weekList.length > 0 ? `<ol class="student-list"><li>${weekList.join('</li><li>')}</li></ol>` : '-'}</td>`;
+                        }
+                        html += `</tr>`;
+                    }
+                    
+                    let unassignedElectro = [...group.m, ...group.f].filter(s => !bestData.periodUsedElectroMales.includes(s) && !bestData.periodUsedElectroFemales.includes(s));
+                    if (unassignedElectro.length > 0) {
+                        html += `<tr style="background:#fffbeb;"><td colspan="5" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${unassignedElectro.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في العلاج الكهربائي في هذه الفترة:</small> ${unassignedElectro.join(' ، ')}</td></tr>`;
+                    }
+                    html += `</tbody></table></div>`;
+                }
+
+                // 3. رسم الـ Allocator
+                if (isAllocator && allocStart) {
+                    html += `<h4 style="margin-top:20px; color:#16a34a;">توزيع مسؤولي التاريخ المرضي Allocator (الفترة ${p + 1})</h4>`;
+                    html += `<h5>${group.name}</h5><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>مسؤولو التاريخ المرضي</th><th>ملاحظات</th></tr></thead><tbody>`;
+                    
+                    let uncoveredDays = [];
+                    bestData.allocLog.forEach(cycle => {
                         if (cycle.isOff) {
                             html += `<tr style="background:#f1f5f9;"><td>${cycle.date}</td><td colspan="2">${cycle.reason}</td></tr>`;
                         } else {
+                            if (cycle.picked.length < (allocMaleReq + allocFemaleReq)) {
+                                uncoveredDays.push(`من ${cycle.startDate} إلى ${cycle.endDate}`);
+                            }
                             let extraText = cycle.extraCount > 0 ? `<br><span style="color:#16a34a; font-weight:bold; font-size: 0.9em;">(+${cycle.extraCount} طالب إضافي من الفائض)</span>` : '';
                             
-                            let cycleMonthAssig = gInfo.schedules[cycle.absMonth - 1] || {};
+                            let cycleMonthAssig = bestData.schedules[cycle.monthIdx].monthAssignments;
                             let formattedPicked = cycle.picked.map(s => {
                                 let deptName = cycleMonthAssig[s] || 'غير محدد';
                                 let displayName = `${s} (${deptName})`;
@@ -998,14 +1003,20 @@ async function generateDistribution() {
                         html += `<tr style="background:#fef2f2;"><td colspan="3"><strong style="color:#dc2626; font-size: 1.1em;">أيام غير مغطاة (عجز في الطلاب):</strong><br> ${uncoveredDays.join('<br>')}</td></tr>`;
                     }
 
-                    if (unassigned.length > 0) {
-                        html += `<tr style="background:#fffbeb;"><td colspan="3" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${unassigned.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في الـ Allocator:</small> ${unassigned.join(' ، ')}</td></tr>`;
+                    if (bestData.allocLog.unassigned && bestData.allocLog.unassigned.length > 0) {
+                        html += `<tr style="background:#fffbeb;"><td colspan="3" contenteditable="true"><strong style="color:#b45309; pointer-events:none;">تحليل: فائض لم يتم توزيعه (${bestData.allocLog.unassigned.length} طلاب)</strong><br><small style="pointer-events:none;">لم يتم توزيعهم في الـ Allocator:</small> ${bestData.allocLog.unassigned.join(' ، ')}</td></tr>`;
                     }
-
                     html += `</tbody></table></div>`;
                 }
             }
             html += `</div>`;
+        }
+
+        // عرض تنبيه شامل بالرسائل المجمعة إن وجدت
+        if (loader) loader.style.display = 'none';
+        if (allGlobalMessages.length > 0) {
+            let alertMsg = "⚠️ تنبيهات من المحاكاة المثالية:\n\n" + allGlobalMessages.join("\n\n") + "\n\nالسيستم حاول يحلها رياضياً واختار أقل ضرر ممكن.";
+            alert(alertMsg);
         }
 
         let container = document.getElementById('resultsContainer');
