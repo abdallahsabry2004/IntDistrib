@@ -23,7 +23,7 @@ function createLoader() {
         const loaderHtml = `<div id="ai-loader" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); z-index:9999; flex-direction:column; justify-content:center; align-items:center; font-family: 'Cairo', sans-serif; direction: rtl;">
             <div style="border: 8px solid #f3f3f3; border-top: 8px solid #1e3a8a; border-radius: 50%; width: 70px; height: 70px; animation: spin 1.5s linear infinite;"></div>
             <h2 style="color:#1e3a8a; margin-top:25px;">جاري حساب التوزيع الأمثل للطلاب...</h2>
-            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة 1,000,000 مسار لاختيار الأفضل وتجنب التكرار.</p>
+            <p style="color:#4b5563; font-size:1.1em; font-weight:bold; margin-top:5px; text-align:center;">يُرجى الانتظار وعدم إغلاق الصفحة.<br>تتم الآن محاكاة 10000 مسار لاختيار الأفضل وتجنب التكرار.</p>
             <p id="sim-progress" style="color:#b45309; font-size:1.2em; font-weight:bold; margin-top:10px;"></p>
             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
         </div>`;
@@ -354,7 +354,7 @@ async function simulatePeriodDepartments(groupM, groupF, baseMaleCaps, baseFemal
     let bestSim = null;
     let lowestPenalty = Infinity;
     let pElem = document.getElementById('sim-progress');
-    const TOTAL_SIMULATIONS = 1000000;
+    const TOTAL_SIMULATIONS = 10000;
 
     for (let sim = 0; sim < TOTAL_SIMULATIONS; sim++) {
         // تحديث العداد كل 10,000 محاولة لتفادي تجمد المتصفح
@@ -645,7 +645,7 @@ async function generateDistribution() {
                 if (simResult.penalty > 0) {
                     if (loader) loader.style.display = 'none';
                     let msg = `⚠️ [تحليل النظام: عجز في أحد أقسام ${group.name}]\n\n`;
-                    msg += `تم تنفيذ 1,000,000 محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
+                    msg += `تم تنفيذ 10000 محاكاة للبحث عن مسار مثالي، ولكن السعة الحالية لا تكفي لمنع التكرار تماماً.\n`;
                     msg += `أفضل مسار تم التوصل إليه يتطلب تكرار أقسام لعدد (${simResult.penalty}) طالب/طالبة.\n\n`;
                     msg += `هل توافق على السماح بالتكرار لسد العجز وتفادي توقف النظام؟\n(سيتم تمييزهم بلون أحمر في الجدول)`;
                     if (!confirm(msg)) {
